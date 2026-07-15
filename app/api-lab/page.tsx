@@ -59,6 +59,44 @@ export default function ApiLabPage() {
       </header>
 
       <main className="dashboard">
+        <section className="panel source-explainer">
+          <div className="panel-heading">
+            <div>
+              <p className="section-kicker">HOW KEYWORDS WORK</p>
+              <h3>검색 키워드는 어디서 정하나</h3>
+            </div>
+          </div>
+          <div className="source-explainer-grid">
+            <article>
+              <strong>1. 초기 seed keyword</strong>
+              <p>
+                MVP에서는 사람이 카테고리별 출발 키워드를 정합니다. 예: 유튜브 쇼츠, AI 서비스,
+                틱톡 챌린지, 패션 트렌드, K팝 이슈.
+              </p>
+            </article>
+            <article>
+              <strong>2. YouTube Data API</strong>
+              <p>
+                seed keyword로 공개 영상을 검색하고, 제목·설명·채널명·조회수·좋아요·댓글 수를
+                가져와 영상 반응 신호로 씁니다.
+              </p>
+            </article>
+            <article>
+              <strong>3. Google News RSS</strong>
+              <p>
+                같은 seed keyword로 최신 뉴스 묶음을 확인하고, 기사 제목·출처·발행일·링크를 뉴스
+                언급 신호로 씁니다.
+              </p>
+            </article>
+            <article>
+              <strong>4. 다음 단계</strong>
+              <p>
+                뉴스 제목과 YouTube 제목에서 반복되는 단어를 뽑아 다음 seed 후보로 확장합니다.
+              </p>
+            </article>
+          </div>
+        </section>
+
         <ApiTestConsole />
       </main>
     </div>
