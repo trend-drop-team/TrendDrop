@@ -4,7 +4,7 @@ import { ApiTestConsole } from "@/components/api-test-console";
 
 export default function ApiLabPage() {
   return (
-    <div className="page-shell">
+    <div className="page-shell api-lab-shell">
       <header className="hero">
         <nav className="topbar">
           <div className="brand">

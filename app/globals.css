@@ -45,6 +45,10 @@ code {
   padding: 24px 0 56px;
 }
 
+.api-lab-shell {
+  max-width: 1120px;
+}
+
 .hero {
   position: relative;
   overflow: hidden;
@@ -556,6 +560,9 @@ h3 {
 .api-lab-layout {
   display: grid;
   gap: 16px;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
 }
 
 .api-action-grid {
@@ -610,10 +617,20 @@ h3 {
   overflow: auto;
   margin: 20px 0 0;
   padding: 18px;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
   min-height: 220px;
   border-radius: 18px;
   background: #21170f;
   color: #f9f0e3;
+}
+
+.api-response-box code {
+  display: block;
+  max-width: 100%;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .api-status-chip {
@@ -653,6 +670,7 @@ h3 {
   margin-top: 12px;
   color: var(--accent-3);
   font-weight: 700;
+  overflow-wrap: anywhere;
 }
 
 .empty-state-box {
