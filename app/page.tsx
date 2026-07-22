@@ -90,8 +90,8 @@ export default async function HomePage() {
         </section>
 
         <section className="trend-grid" id="trend-grid">
-          {trends.map((trend) => (
-            <article className="trend-card" key={trend.keyword}>
+          {trends.map((trend, index) => (
+            <article className="trend-card" key={`${trend.keyword}-${trend.rank ?? index}-${index}`}>
               <div className="trend-head">
                 <div>
                   <div className="trend-rank">#{trend.rank}</div>
@@ -147,8 +147,8 @@ export default async function HomePage() {
               </div>
             </div>
             <ul className="watchlist">
-              {watchItems.map((item) => (
-                <li key={item.keyword}>
+              {watchItems.map((item, index) => (
+                <li key={`${item.keyword}-${index}`}>
                   <div className="watch-keyword">
                     <strong>{item.keyword}</strong>
                     <p className="watch-meta">{item.meta}</p>
