@@ -47,3 +47,15 @@ export const trendSnapshots = pgTable("trend_snapshots", {
   sourceUrl: varchar("source_url", { length: 500 }),
   capturedAt: timestamp("captured_at", { withTimezone: true }).defaultNow().notNull(),
 });
+
+export const trendContents = pgTable("trend_contents", {
+  id: integer().primaryKey().generatedAlwaysAsIdentity(),
+  keywordId: integer("keyword_id").notNull().references(() => keywords.id),
+  kind: varchar("kind", { length: 32 }).notNull(),
+  title: text("title").notNull(),
+  url: varchar("url", { length: 500 }).notNull(),
+  source: varchar("source", { length: 160 }),
+  rank: integer("rank"),
+  publishedAt: timestamp("published_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});

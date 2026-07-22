@@ -1,8 +1,11 @@
 import Link from "next/link";
 
-import { categories, timelineSteps, trends, watchItems } from "@/lib/trend-data";
+import { categories, timelineSteps, watchItems } from "@/lib/trend-data";
+import { getTrendFeed } from "@/lib/trends-service";
+import CollectionControls from "@/components/collection-controls";
 
-export default function HomePage() {
+export default async function HomePage() {
+  const { data: trends } = await getTrendFeed();
   return (
     <div className="page-shell">
       <header className="hero">
@@ -68,6 +71,7 @@ export default function HomePage() {
       </header>
 
       <main className="dashboard">
+        <CollectionControls />
         <section className="section-heading">
           <div>
             <p className="section-kicker">LIVE SIGNALS</p>
@@ -86,8 +90,8 @@ export default function HomePage() {
         </section>
 
         <section className="trend-grid" id="trend-grid">
-          {trends.map((trend) => (
-            <article className="trend-card" key={trend.keyword}>
+          {trends.map((trend, index) => (
+            <article className="trend-card" key={`${trend.keyword}-${trend.rank ?? index}-${index}`}>
               <div className="trend-head">
                 <div>
                   <div className="trend-rank">#{trend.rank}</div>
@@ -143,8 +147,8 @@ export default function HomePage() {
               </div>
             </div>
             <ul className="watchlist">
-              {watchItems.map((item) => (
-                <li key={item.keyword}>
+              {watchItems.map((item, index) => (
+                <li key={`${item.keyword}-${index}`}>
                   <div className="watch-keyword">
                     <strong>{item.keyword}</strong>
                     <p className="watch-meta">{item.meta}</p>
