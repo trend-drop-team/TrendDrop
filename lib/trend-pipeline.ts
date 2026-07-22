@@ -46,8 +46,8 @@ export async function collectTrendPipeline({ geo = "KR", limit = 10 } = {}) {
       sourceUrl: news[0]?.link ?? `https://trends.google.com/trending?geo=${geo}`,
     });
 
-    for (const item of news.slice(0, 3)) {
-      await db.insert(trendContents).values({ keywordId: keyword.id, kind: "news", title: item.title, url: item.link, source: item.source, publishedAt: item.publishedAt ? new Date(item.publishedAt) : null });
+    for (const [newsIndex, item] of news.slice(0, 3).entries()) {
+      await db.insert(trendContents).values({ keywordId: keyword.id, kind: "news", title: item.title, url: item.link, source: item.source, rank: newsIndex + 1, publishedAt: item.publishedAt ? new Date(item.publishedAt) : null });
     }
     for (const [videoIndex, video] of videos.slice(0, 3).entries()) {
       const videoId = video.id.videoId;

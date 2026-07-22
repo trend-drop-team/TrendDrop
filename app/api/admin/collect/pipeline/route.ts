@@ -11,6 +11,7 @@ export async function POST(request: Request) {
     await ensureDatabaseTables();
     return NextResponse.json({ ok: true, ...(await collectTrendPipeline({ geo: body.geo ?? "KR", limit: body.limit ?? 10 })) });
   } catch (error) {
-    return NextResponse.json({ ok: false, error: "Trend pipeline failed", detail: error instanceof Error ? error.message : "Unknown error" }, { status: 500 });
+    const cause = error instanceof Error && error.cause instanceof Error ? `; cause: ${error.cause.message}` : "";
+    return NextResponse.json({ ok: false, error: "Trend pipeline failed", detail: `${error instanceof Error ? error.message : "Unknown error"}${cause}` }, { status: 500 });
   }
 }
