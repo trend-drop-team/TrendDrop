@@ -34,6 +34,7 @@ export default function CollectionControls() {
       <a className="secondary-button link-button" href="/collection-log">
         수집 기록 보기
       </a>
+      <a className="secondary-button link-button" href="/trend-keywords">1차 키워드 보기</a>
       {message && <span className="collection-message">{message}</span>}
     </div>
   );
