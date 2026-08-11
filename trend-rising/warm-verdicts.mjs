@@ -1,6 +1,6 @@
 /**
  * 판정 캐시 워밍 — 전 기간에 걸쳐 후보에 오른 적 있는 모든 term을 한 번에 판정해
- * popular_term_verdicts를 채운다.
+ * keyword_verdicts를 채운다.
  *
  * 이게 있어야 backfill-popular.mjs가 API를 한 번도 호출하지 않고 전 기간을
  * 재생성할 수 있다. 수집/랭킹을 분리한 것과 같은 이유 — 비싼 건 한 번만.

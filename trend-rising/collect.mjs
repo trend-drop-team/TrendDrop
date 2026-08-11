@@ -1,5 +1,5 @@
 /**
- * 수집 오케스트레이션 — 5소스를 병렬 스크래핑해 1시간 버킷으로 rising_raw_items에 축적.
+ * 수집 오케스트레이션 — 5소스를 병렬 스크래핑해 1시간 버킷으로 raw_signals에 축적.
  * trend-collector src/jobs/collect-sources.ts 에서 이전(SQLite→Postgres).
  *
  * 실행:  node trend-rising/collect.mjs
@@ -51,7 +51,7 @@ async function main() {
 
   const results = await Promise.all(ADAPTERS.map(runAdapter));
 
-  // rising_raw_items 형식으로 평탄화 (dedup 키: source, text_hash, bucket_at)
+  // raw_signals 형식으로 평탄화 (dedup 키: source_site, text_hash, bucket_at)
   const rows = [];
   console.log("소스        수집");
   console.log("─".repeat(28));
@@ -63,13 +63,13 @@ async function main() {
     console.log(`${r.name.padEnd(10)}  ${String(r.items.length).padStart(4)}`);
     for (const it of r.items) {
       rows.push({
-        source: it.source,
-        unit: it.unit,
+        site: it.source,
+        kind: it.unit,
         text: it.text,
         textHash: sha1(it.text),
         meta: it.meta ?? null,
         bucketAt: bucket,
-        collectedAt,
+        capturedAt: collectedAt,
       });
     }
   }
@@ -78,12 +78,12 @@ async function main() {
 
   if (!process.env.DATABASE_URL) {
     console.log("\n⚠️ DATABASE_URL 미설정 → 저장 스킵 (스크래퍼 검증만). 예시 3건:");
-    for (const s of rows.slice(0, 3)) console.log(`  [${s.source}] ${s.text.slice(0, 60)}`);
+    for (const s of rows.slice(0, 3)) console.log(`  [${s.site}] ${s.text.slice(0, 60)}`);
     return;
   }
 
   const saved = await insertRawItems(rows);
-  console.log(`\n💾 rising_raw_items 저장(신규): ${saved}건`);
+  console.log(`\n💾 raw_signals 저장(신규): ${saved}건`);
 }
 
 main()

@@ -1,5 +1,5 @@
 /**
- * 1회 seed — trend-collector에서 export한 스냅샷(11일치)을 rising_raw_items로 적재.
+ * 1회 seed — trend-collector에서 export한 스냅샷(11일치)을 raw_signals로 적재.
  * 이후엔 collect.mjs가 매시간 append하므로 이 스크립트는 최초 1번만.
  *
  * 실행:  node trend-rising/seed.mjs [스냅샷경로]
@@ -24,17 +24,17 @@ const rows = raw.map((r) => {
   }
   const bucketAt = r.bucket_at ?? r.bucketAt;
   return {
-    source: r.source,
-    unit: r.unit ?? "title",
+    site: r.source,
+    kind: r.unit ?? "title",
     text: r.text,
     textHash: sha1(r.text),
     meta,
     bucketAt,
-    collectedAt: bucketAt,
+    capturedAt: bucketAt,
   };
 });
 
-console.log(`seed 대상 ${rows.length}행 → rising_raw_items`);
+console.log(`seed 대상 ${rows.length}행 → raw_signals`);
 let total = 0;
 for (let i = 0; i < rows.length; i += 1000) {
   total += await insertRawItems(rows.slice(i, i + 1000));

@@ -2,7 +2,7 @@
 
 커뮤니티·유튜브·구글트렌드에서 매시간 원문을 긁어와, **"지금 많이 언급되는 키워드" top10**을 만들어 DB에 쌓는다.
 
-원래는 "평소 대비 갑자기 늘어난 단어"를 뽑는 급상승(rising) 방식이었으나, **인기(popular) 방식으로 전환**했다. 폴더 이름과 원문 테이블 이름(`rising_*`)은 그때의 잔재다.
+원래는 "평소 대비 갑자기 늘어난 단어"를 뽑는 급상승(rising) 방식이었으나, **인기(popular) 방식으로 전환**했다. 폴더 이름(`trend-rising/`)은 그때의 잔재다 — 테이블 이름은 2026-08-11에 통합 스키마 이름(`raw_signals` 등)으로 옮겨서 더는 `rising_*`가 아니다.
 
 ---
 
@@ -11,13 +11,13 @@
 ```
 매시 정각 (launchd → run-hourly.sh)
     │
-    ├─▶ collect.mjs        5개 소스 병렬 스크래핑 → rising_raw_items 에 축적
+    ├─▶ collect.mjs        5개 소스 병렬 스크래핑 → raw_signals 에 축적
     │
     └─▶ rank-popular.mjs
            ├─ 최근 6시간 원문을 읽어 토큰화
            ├─ 소스별 가중치로 점수 합산 → 후보 50개
            ├─ LLM 판정으로 노이즈 제거·복원·병합 → top10
-           └─ popular_runs / popular_snapshots 저장
+           └─ collection_runs / popular_snapshots 저장
 ```
 
 **수집과 랭킹이 분리된 게 핵심이다.** 원문이 DB에 남아 있으므로 가중치를 바꿔도 API를 다시 호출하지 않고 과거 전 구간을 재계산할 수 있다. LLM 판정도 같은 이유로 캐시에 저장한다 — 비싼 건 한 번, 싼 건 언제든.
@@ -38,7 +38,7 @@
 
 > **네이트판은 2026-08-03에 제외했다.** 사연·신변잡기 위주라 트렌드 키워드가 거의 안 나왔다 — `남편`·`시어머니`·`강아지`처럼 LLM 판정에서 대부분 탈락하는 일반명사만 올라왔다. 수집기(`sources/natepann.mjs`)와 기존 수집분 299행을 함께 지웠다.
 
-수집한 행은 **1시간 버킷**(정시로 내림)으로 묶여 `rising_raw_items`에 들어간다.
+수집한 행은 **1시간 버킷**(정시로 내림)으로 묶여 `raw_signals`에 들어간다.
 
 ```
 UNIQUE (source, text_hash, bucket_at)
@@ -79,7 +79,7 @@ UNIQUE (source, text_hash, bucket_at)
 
 기본 **최근 6시간**(약 900~1,500행). 1시간이면 표본이 250행 안팎이라 순위가 뭉갠다.
 
-**버킷 개수가 아니라 시계 기준이다.** 수집이 빠진 시간대가 있어도 과거로 더 뻗지 않고 표본만 줄어든다 — "6시간 창"이 실제로 6시간을 뜻한다. `popular_runs`에 `window_hours`(창 길이)와 `buckets`(그 창에 실제로 있던 버킷 수)를 둘 다 남기므로, 둘을 비교하면 그 시점에 수집이 몇 회 빠졌는지 바로 보인다.
+**버킷 개수가 아니라 시계 기준이다.** 수집이 빠진 시간대가 있어도 과거로 더 뻗지 않고 표본만 줄어든다 — "6시간 창"이 실제로 6시간을 뜻한다. `collection_runs`에 `window_hours`(창 길이)와 `buckets`(그 창에 실제로 있던 버킷 수)를 둘 다 남기므로, 둘을 비교하면 그 시점에 수집이 몇 회 빠졌는지 바로 보인다.
 
 기준점은 `now()`가 아니라 `max(bucket_at)`이다. 이번 시각 수집이 실패해도 직전 데이터로 랭킹은 나오되, 출력에 기준 시각이 찍혀 오래된 데이터를 알아챌 수 있다.
 
@@ -242,7 +242,7 @@ LLM이 점수를 직접 매기면 같은 `하이브`가 이번엔 85, 다음엔 
 
 (term, 예문) 조합을 키로 쓰면 정확해지지만 캐시 적중률이 무너져 비용이 다시 올라간다. 트레이드오프를 받아들인 선택이다.
 
-**교정 방법:** `popular_term_verdicts`에서 해당 행을 지우거나 `keep`을 직접 고치면 다음 실행부터 반영된다. `sample` 컬럼에 판정 근거가 남아 있어 왜 그렇게 판정됐는지 확인할 수 있다.
+**교정 방법:** `keyword_verdicts`에서 해당 행을 지우거나 `keep`을 직접 고치면 다음 실행부터 반영된다. `sample` 컬럼에 판정 근거가 남아 있어 왜 그렇게 판정됐는지 확인할 수 있다.
 
 ---
 
@@ -262,46 +262,61 @@ LLM이 점수를 직접 매기면 같은 `하이브`가 이번엔 85, 다음엔 
 
 ## 9. 저장 — `store.mjs`
 
-이 파이프라인이 쓰는 테이블은 4개가 전부다. 모두 `store.mjs`가 멱등하게 생성한다(`CREATE TABLE IF NOT EXISTS` + `ALTER TABLE ADD COLUMN IF NOT EXISTS`).
+이 파이프라인이 쓰는 테이블은 6개다. 모두 `store.mjs`가 멱등하게 생성한다(`CREATE TABLE IF NOT EXISTS` + `ALTER TABLE ADD COLUMN IF NOT EXISTS`). 테이블·컬럼 이름은 통합 스키마 문서(`docs/trend-data-schema-and-api-spec.md`, `docs/trend-rising-rename-plan.md`)를 따른다 — 2026-08-11에 `rising_*`/`popular_*` 접두사에서 이 이름들로 옮겼다(`trend-rising/migrations/` 참고).
 
 ```
-rising_raw_items        수집 원문          909행 (최근 6시간)
-popular_runs            랭킹 실행 이력       1행
-popular_snapshots       실행별 top10       10행
-popular_term_verdicts   LLM 판정 캐시      75행
+sources                 소스 마스터        5행 (dcbest/theqoo/instiz/youtube/gtrends 고정)
+raw_signals              수집 원문          5,451행
+collection_runs          랭킹 실행 이력     28행 — 랭킹 run이다. 수집과 랭킹이 분리돼 있어
+                                            raw_signals는 이 테이블을 참조하지 않는다(11장 참고)
+popular_snapshots        실행별 top10       280행
+keyword_verdicts         LLM 판정 캐시     300여행
+keywords                 키워드 엔티티      keep=true term의 승격본. slug·카테고리 보유
 ```
 
+> `popular_snapshots` → `trend_snapshots` 통합은 미뤄뒀다. 그 이름을 jin의 `db/schema.ts`가 아직 쓰고 있어, 그 코드가 지워진 뒤에 `keyword_id` FK·`reasons` jsonb 구조로 다시 만든다.
+>
 > 2026-08-03에 원문을 최근 6시간만 남기고 42,202행을 지웠다. 옛 급상승 방식의 `rising_runs`·`rising_snapshots`도 함께 제거했다. 판정 캐시는 term 단위 자산이라 원문과 무관하게 유지한다.
 
-### `rising_raw_items` — 수집 원문
+### `sources` — 소스 마스터
+
+| 컬럼 | 타입 | 내용 |
+|---|---|---|
+| `id` | int PK | |
+| `name` | varchar(80) UNIQUE | 사람이 읽는 이름 (예: "디시인사이드 실시간 베스트") |
+| `kind` | varchar(40) UNIQUE | 사이트 식별자 (dcbest/theqoo/instiz/youtube/gtrends) |
+| `created_at` | timestamptz | |
+
+### `raw_signals` — 수집 원문
 
 | 컬럼 | 타입 | 내용 |
 |---|---|---|
 | `id` | bigserial PK | |
-| `source` | text NOT NULL | dcbest / theqoo / instiz / youtube / gtrends |
-| `unit` | text NOT NULL | title / comment |
+| `source_id` | int NOT NULL | → `sources.id` (어느 사이트) |
+| `source` | text NOT NULL | 신호 종류: title / comment |
 | `text` | text NOT NULL | 원문 한 줄 |
 | `text_hash` | text NOT NULL | sha1(text) — 중복 판별용 |
+| `video_id` | text | 유튜브 영상 ID(해당 시). `meta.videoId`에서 분리된 독립 컬럼 |
 | `meta` | jsonb | 소스별 부가정보 (2장 참고) |
 | `bucket_at` | timestamptz NOT NULL | 1시간 버킷 (정시로 내림) |
-| `collected_at` | timestamptz NOT NULL | 실제 수집 시각 |
+| `captured_at` | timestamptz NOT NULL | 실제 수집 시각 |
 
 ```
-UNIQUE (source, text_hash, bucket_at)
+UNIQUE (source_id, text_hash, bucket_at)
 ```
 
 같은 시간대·같은 소스의 같은 글은 한 번만 들어간다. 반대로 버킷이 다르면 또 들어가므로 **체류시간이 점수에 반영된다.**
 
-### `popular_runs` — 랭킹 실행 이력
+### `collection_runs` — 랭킹 실행 이력
 
 | 컬럼 | 타입 | 내용 |
 |---|---|---|
 | `id` | bigserial PK | |
-| `ran_at` | timestamptz NOT NULL | 실행 시각 (기본 now()) |
+| `started_at` | timestamptz NOT NULL | 실행 시각 (기본 now()) |
 | `bucket_at` | timestamptz NOT NULL | 기준 시각 = 창의 최신 버킷 |
 | `window_hours` | int | 창 길이(시간) |
 | `buckets` | int NOT NULL | 그 창에 **실제로 있던** 버킷 수 |
-| `item_count` | int NOT NULL | 창 안의 원문 행 수 |
+| `raw_signal_count` | int NOT NULL | 창 안의 원문 행 수 |
 | `filtered` | boolean NOT NULL | LLM 필터가 걸렸는지 |
 
 `window_hours`와 `buckets`를 비교하면 그 시점에 수집이 몇 회 빠졌는지 바로 보인다 (6시간 창에 버킷 4개 = 2회 누락).
@@ -311,7 +326,7 @@ UNIQUE (source, text_hash, bucket_at)
 | 컬럼 | 타입 | 내용 |
 |---|---|---|
 | `id` | bigserial PK | |
-| `run_id` | bigint NOT NULL | → `popular_runs.id` |
+| `run_id` | bigint NOT NULL | → `collection_runs.id` |
 | `bucket_at` | timestamptz | 기준 시각 — 조인 없이 시간으로 조회하려고 복제해 둔다 |
 | `term` | text NOT NULL | 키워드 (병합·복원된 이름) |
 | `rank` | int NOT NULL | 1~10 |
@@ -333,14 +348,14 @@ SELECT term, rank, score FROM popular_snapshots
  WHERE bucket_at > now() - interval '6 hours' ORDER BY bucket_at DESC, rank;
 ```
 
-### `popular_term_verdicts` — LLM 판정 캐시
+### `keyword_verdicts` — LLM 판정 캐시
 
 | 컬럼 | 타입 | 내용 |
 |---|---|---|
 | `term` | text PK | 판정 대상 단어 |
 | `keep` | boolean NOT NULL | 트렌드 키워드로 쓸지 |
 | `canonical` | text | 병합·복원된 이름. 그대로면 null |
-| `category` | text | 인물 / 작품·콘텐츠 / … / 일반어 / 문법조각 |
+| `content_type` | text | 인물 / 작품·콘텐츠 / … / 일반어 / 문법조각 (콘텐츠 성격 축). `keywords.category`가 이 값을 그대로 가져다 UI 카테고리로도 쓴다 |
 | `reason` | text | 판정 이유 한 줄 |
 | `sample` | text | 판정 근거가 된 예문 |
 | `model` | text | 판정한 모델 |
@@ -350,8 +365,24 @@ SELECT term, rank, score FROM popular_snapshots
 
 ```sql
 -- 판정이 틀렸을 때: 해당 행만 지우면 다음 실행에서 다시 물어본다
-DELETE FROM popular_term_verdicts WHERE term = '일본';
+DELETE FROM keyword_verdicts WHERE term = '일본';
 ```
+
+> **UI 카테고리를 별도 축으로 뒀다가 되돌렸다(2026-08-11).** 프론트 mock(`lib/trend-data.ts`)의 푸드/뷰티/테크 같은 소비 라이프스타일 카테고리를 그대로 가져다 LLM에 판정시켰더니, trend-rising 콘텐츠(인물·정치·사건사고·스포츠 등 커뮤니티 담론)와 안 맞아 keep=true의 87%가 "기타"로 나왔다. UI 카테고리가 필요하면 이 `content_type`을 그대로 쓴다.
+
+### `keywords` — 키워드 엔티티
+
+| 컬럼 | 타입 | 내용 |
+|---|---|---|
+| `id` | int PK | |
+| `term` | varchar(160) UNIQUE | 정식 이름 (canonical 반영됨) |
+| `slug` | varchar(200) UNIQUE | 한글 슬러그(공백→하이픈). 상세페이지 라우팅용 |
+| `category` | varchar(80) | `keyword_verdicts.content_type` 재사용 |
+| `source_id` | int | → `sources.id`, 최초 발견 소스(가중치 최상위 소스로 추정) |
+| `first_seen_at` | timestamptz | 최초 발견 시각 |
+| `created_at` | timestamptz | |
+
+`savePopularRun()`이 스냅샷을 저장하기 전, `keep=true`로 살아남은 term을 전부 `upsertKeyword()`로 승격시킨다. 이미 있는 term은 건드리지 않는다(`first_seen_at`을 "최초" 그대로 유지하기 위해).
 
 ---
 
@@ -366,7 +397,7 @@ DELETE FROM popular_term_verdicts WHERE term = '일본';
 | `stop_reason: refusal` | throw → 위 오류 경로 |
 | `--no-llm` 플래그 | 호출 자체를 안 함 (비교용) |
 
-`popular_runs.filtered`에 필터 적용 여부가 기록되므로 나중에 "이 run은 안 걸렀다"를 구분할 수 있다.
+`collection_runs.filtered`에 필터 적용 여부가 기록되므로 나중에 "이 run은 안 걸렀다"를 구분할 수 있다.
 
 ---
 
@@ -417,7 +448,7 @@ node trend-rising/backfill-popular.mjs --reset
 
 | 파일 | 역할 | API 호출 |
 |---|---|---|
-| `collect.mjs` | 6소스 병렬 수집 → `rising_raw_items` | YouTube |
+| `collect.mjs` | 5소스 병렬 수집 → `raw_signals` | YouTube |
 | `sources/*.mjs` | 소스별 스크래퍼 (dcbest, theqoo, instiz, youtube, gtrends, http) | |
 | `tokenize.mjs` | 문장 → 단어. 조사 제거 + 불용어 | ❌ |
 | `popular.mjs` | 인기 랭킹 로직 (가중치·보정·보너스) | ❌ |
@@ -427,6 +458,7 @@ node trend-rising/backfill-popular.mjs --reset
 | `backfill-popular.mjs` | 전 기간 시간순 재생성. 캐시만 읽음 | ❌ |
 | `store.mjs` | Postgres 저장 계층 | ❌ |
 | `seed.mjs` | 초기 1회 데이터 적재 (이미 실행됨) | ❌ |
+| `migrations/*.sql`, `migrations/*.mjs` | 1회 스키마 마이그레이션 기록 (실행 완료, 되돌리기 절 포함) | 일부 ✅ |
 | `run-hourly.sh` | launchd가 매시간 호출 | |
 
 **LLM 설정** (`verdict.mjs:19-20`):
