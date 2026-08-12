@@ -14,7 +14,8 @@ flowchart LR
   B[YouTube Data API] --> R
   C[Google News RSS] --> R
   R --> S[raw_signals]
-  S --> K[keywords]
+  S --> V[keyword_verdicts]
+  V --> K[keywords]
   K --> T[trend_snapshots]
   K --> N[trend_contents]
   T --> API[공개 API]
@@ -59,6 +60,10 @@ flowchart LR
 | `keyword_count`              | int       | 이 실행에서 확정된 키워드 개수                                                        |
 | `api_call_log`               | jsonb     | `[{ api: string, calledAt: ISO string }]` — 외부 API 호출 이력                        |
 | `error_message`              | text      | 실패 시 에러 메시지                                                                   |
+| `bucket_at`                  | timestamp | 이 실행이 참조한 데이터의 기준 시각(창의 최신 버킷). `started_at`(프로세스 시작 시각)과 별개 — 수집이 늦어도 직전 데이터로 랭킹은 내되, 얼마나 오래된 데이터인지 판단하는 값 |
+| `window_hours`               | int       | 집계 창 길이(시간). 실행마다 파라미터가 달라질 수 있어 재현성 확보용                  |
+| `buckets`                    | int       | 창 안에 실제로 존재한 버킷 수. `window_hours`와 비교해 수집 누락을 감지                |
+| `filtered`                   | boolean   | LLM 노이즈 필터가 이 실행에 실제로 적용됐는지(키 부재·오류 시 false로 남음)           |
 
 ### 2.4 `keywords` — 키워드(토픽) 엔티티
 
@@ -77,12 +82,14 @@ flowchart LR
 | ------------- | -------------------- | -------------------------------------------------------------- |
 | `id`          | bigint PK            |                                                                |
 | `run_id`      | FK → collection_runs |                                                                |
-| `source`      | string               | `trending_search` / `video_title` / `video_tag` / `comment` 등 |
+| `source_id`   | FK → sources          | 어느 사이트/API에서 수집됐는지(예: `dcbest`/`youtube`/`gtrends`). 커뮤니티 소스가 늘어나면 `source` 문자열만으로는 사이트를 구분할 수 없어 별도 FK로 분리 |
+| `source`      | string               | `trending_search` / `video_title` / `video_tag` / `comment` 등 — 신호의 종류(위 `source_id`와는 별개) |
 | `text`        | text                 | 원문 텍스트                                                    |
 | `text_hash`   | string               | 동일 실행 내 중복 제거용 해시                                  |
 | `video_id`    | string, nullable     | YouTube 영상 ID(해당 시)                                       |
 | `meta`        | jsonb                | 카테고리 힌트 등 부가 정보                                     |
-| `captured_at` | timestamp            |                                                                |
+| `bucket_at`   | timestamp             | 수집이 귀속되는 1시간 버킷(정시로 내림). `UNIQUE(source_id, text_hash, bucket_at)` 중복 제거와 체류시간 기반 가중치 계산에 사용 |
+| `captured_at` | timestamp            | 실제 수집 시각                                                 |
 
 > 데이터분석가 참고: 키워드가 왜 그 점수를 받았는지 원인 분석이 필요하면 이 테이블을 `run_id` + 토큰 매칭으로 역추적하면 됩니다.
 
@@ -93,19 +100,21 @@ flowchart LR
 | `id`           | bigint PK            |                                                                                       |
 | `keyword_id`   | FK → keywords        |                                                                                       |
 | `run_id`       | FK → collection_runs | 이 스냅샷이 속한 실행(=시점)                                                          |
-| `source_id`    | FK → sources         |                                                                                       |
 | `rank`         | int                  | 해당 run 안에서의 순위(1이 1위)                                                       |
 | `score`        | int (0~100)          | 트렌드 점수. 랭킹·정렬의 기준값                                                       |
 | `growth_rate`  | string               | 표시용 문자열 (예: `+182%`, `1,200회 언급`) — 사람이 읽는 라벨이지 계산용 수치가 아님 |
 | `velocity`     | string               | 확산 속도 표시값 (예: `9.1/10`)                                                       |
+| `mentions`     | int                  | 창(window) 안 언급 횟수(raw count) — `growth_rate` 같은 표시값의 근거 원본            |
 | `summary`      | text                 | 1줄 요약                                                                              |
-| `reasons`      | jsonb                | `[{ source: string, text: string }]` — "왜 뜨나" 근거 목록                            |
+| `reasons`      | jsonb                | `[{ source: string, text: string, sample?: string, weight?: number }]` — "왜 뜨나" 근거 목록. `sample`은 근거가 된 원문 인용, `weight`는 해당 소스가 점수에 기여한 비중 |
 | `source_label` | string               | 사람이 읽는 출처 설명 (예: `Google Trends + YouTube 교차확인`)                        |
 | `external_ref` | string               | 외부 소스 참조 키                                                                     |
 | `source_url`   | text                 | 대표 원문 링크                                                                        |
 | `captured_at`  | timestamp            | 실제 수집 시각 (`run.started_at`과 별개로 있을 수 있음)                               |
 
 > **`score` vs `rank` 구분**: `rank`는 해당 시점(run) 안에서의 상대 순위, `score`는 절대 점수입니다. 시계열 차트는 `score`를, 등락 배지(▲▼NEW)는 이전 run 대비 `rank` 변화를 씁니다.
+>
+> **단일 `source_id` 컬럼을 두지 않는 이유**: 한 키워드가 같은 시점에 여러 소스(Google Trends + YouTube 등)에서 동시에 잡히는 게 정상이라 "대표 소스 하나"를 FK로 고를 기준이 없습니다. 소스별 기여는 `reasons`(배열)와 `source_label`(사람이 읽는 요약 문자열)이 이미 표현하므로, 단일 FK는 오히려 정보를 잃습니다.
 
 ### 2.7 `trend_contents` — 키워드에 딸린 콘텐츠(뉴스/영상 등)
 
@@ -134,8 +143,27 @@ flowchart LR
 
 | 테이블            | 컬럼                                      | 설명                           |
 | ----------------- | ----------------------------------------- | ------------------------------ |
-| `users`           | `id`, `email`, `created_at`               | 초기엔 익명 세션으로 대체 가능 |
+| `users`           | `id`, `email`, `password_hash`, `name`, `email_verified_at`, `created_at`, `updated_at` | 초기엔 익명 세션으로 대체 가능. `password_hash`는 해시된 값만 저장(평문 금지), 소셜 로그인 등을 열어두기 위해 nullable |
 | `watchlist_items` | `id`, `user_id`, `keyword_id`, `added_at` | 사용자가 저장한 키워드         |
+
+> 지금 프론트엔 저장 UI가 두 갈래로 따로 존재합니다 — 홈 "워치리스트 패널"(`watchItems` mock 배열)과 랭킹 행의 "관심 키워드 즐겨찾기 ★"(`localStorage`의 `td-saved-keywords`). 둘 다 이 `watchlist_items` 하나로 귀결되어야 할 같은 개념이라, 로그인이 붙기 전까지는 즐겨찾기를 `localStorage`에 남겨두는 게 맞지만 **API/화면을 합칠 때 두 UI를 하나의 저장 목록으로 통합**해야 합니다(중복 관리 UI를 남기지 않도록).
+
+### 2.10 `keyword_verdicts` — 키워드 채택 판정 캐시
+
+원문에서 뽑힌 단어를 그대로 `keywords`로 만들면 토큰화 손상(`오디세`→`오디세이`)이나 노이즈(`같아서`, `대한` 등 문법 조각)가 섞입니다. LLM이 이를 판정하고, 그 결과를 term 단위로 캐싱해두는 테이블입니다. **채택(`keep = true`)된 term만 `keywords`로 승격됩니다.**
+
+| 컬럼           | 타입              | 설명                                                                 |
+| -------------- | ----------------- | --------------------------------------------------------------------- |
+| `term`         | text PK           | 판정 대상 원시 단어(토크나이저 산출물, 정규화 전)                     |
+| `keep`         | boolean           | 트렌드 키워드로 채택할지                                              |
+| `canonical`    | text, nullable    | 병합·복원된 정식 이름. 채택되면 이 값(없으면 `term` 그대로)이 `keywords.term`으로 연결됨 |
+| `content_type` | text, nullable    | 인물 / 작품·콘텐츠 / 기업·주식 / 사건·사고 / 재난·속보 / 정치·사회 / 스포츠 / 일반어 / 문법조각 — `categories`(UI 탭용: 푸드/뷰티/테크)와는 다른 축이므로 별도 필드 |
+| `reason`       | text              | 판정 이유 한 줄                                                       |
+| `sample`       | text              | 판정 근거가 된 예문                                                   |
+| `model`        | text              | 판정한 모델                                                           |
+| `decided_at`   | timestamp         | 판정 시각(캐시 신선도 판단 기준)                                      |
+
+> 같은 term을 두 번 LLM에 묻지 않기 위한 캐시입니다. 판정이 틀렸을 때는 해당 행을 지우거나 `keep`을 직접 고치면 다음 실행부터 재판정됩니다.
 
 ---
 
@@ -328,6 +356,7 @@ HTTP 상태 코드: `400`(요청 오류) / `404`(대상 없음) / `401`(인증 �
 | ----------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
 | `db/schema.ts` (master), `lib/pipeline-v-he/schema.ts` (v-he)                                                                 | ✅ 구현됨(단, 이 문서의 통합 스키마와 컬럼명·구조가 다름 — 아직 마이그레이션 전)                             |
 | 2절 스키마의 `categories`, `keyword_relations`, `users`, `watchlist_items`, `reasons`(jsonb), `thumbnail_url`, `metric_label` | ❌ 미구현 — 설계 단계                                                                                        |
+| `collection_runs.bucket_at`/`window_hours`/`buckets`/`filtered`, `raw_signals.source_id`/`bucket_at`, `trend_snapshots.mentions`, `keyword_verdicts` | ⚠️ `trend-rising/` 파이프라인(별도 DB 테이블: `popular_runs`/`rising_raw_items`/`popular_snapshots`/`popular_term_verdicts`)에는 이미 구현돼 있으나, 이 문서의 통합 스키마엔 아직 반영·마이그레이션 전 |
 | `GET /api/trends`                                                                                                             | ✅ 구현됨(단, 응답 필드가 3.2 예시보다 적고 `slug`/`previousRank`/`spark` 없음)                              |
 | 3.3~3.6의 API (`/api/keywords/:slug`, `/history`, `/explore/heatmap`, `/watchlist`)                                           | ❌ 미구현 — 홈/탐색/상세 화면은 현재 전부 mock 데이터(`lib/trend-data.ts`, `lib/trend-timeline.ts`)로만 동작 |
 | `meta.ticker`, 5절의 폴링 가이드                                                                                              | ❌ 미구현 — 현재 티커는 `lib/trend-timeline.ts`의 `getTickerItems()` mock 계산, LIVE 토글은 8초 setInterval로 mock 스냅샷 인덱스만 증가시킴 |

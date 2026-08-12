@@ -92,7 +92,7 @@
 1. **키워드 상세 페이지 라우팅 불가** — `keywords`에 사람이 읽고 URL로 쓸 수 있는 식별자(`slug`)가 없어 `/trend/[id]`를 만들어도 링크가 부자연스러움
 2. **카테고리가 자유 텍스트 문자열** — `categoryFor()` 정규식 휴리스틱으로 매번 추론, 오타/중복 카테고리 생성 가능, 마스터 목록이 없어 UI 필터가 "현재 존재하는 값"에만 의존
 3. **촘촘한 시계열 부재** — `/explore`·홈의 스파크라인이 요구하는 "짧은 간격 다회 스냅샷"을 저장할 스케줄러/보존 정책이 없음(현재는 사람이 버튼을 누를 때만 1행 추가)
-4. **워치리스트 영속성 없음** — 사용자 계정 개념이 없어 저장 기능이 정적 배열
+4. **워치리스트 영속성 없음, 게다가 저장 UI가 두 갈래** — 사용자 계정 개념이 없어 저장 기능이 정적 배열(`watchItems`)일 뿐 아니라, PR #26 이후 랭킹 행에 `localStorage` 기반 "관심 키워드 즐겨찾기 ★"가 별도로 추가되어 같은 목적의 저장 기능이 두 곳에 나뉘어 있음. 백엔드 연동 시 하나의 `watchlist_items`로 합쳐야 함(6.2 참고)
 5. **관리자 API 무방비** — `pipeline-v-he` 외 나머지 admin/collect·db/setup·bootstrap 엔드포인트에 인증이 전혀 없어 `/api-lab`이 배포되면 외부에서 DB 쓰기 유발 가능
 6. **콘텐츠에 썸네일 없음** — `trend_contents`에 `thumbnail_url`이 없어 상세 페이지의 "관련 콘텐츠" 카드가 플랫폼 이니셜만 표시
 7. **재실행 시 중복/폭주 방지 부재** — master 파이프라인은 idempotency나 실행 잠금이 없어 버튼 연타 시 동일 키워드에 대해 `trend_contents`가 계속 append됨
@@ -115,6 +115,7 @@
 | 카테고리 탭                              | 카테고리 이름 목록 + 표시 순서                                     | `trend-data.ts`에서 파생한 `Set`             | `categories.name`, `categories.sort_order`                                                                                   |
 | 요약 통계(추적 수/신규 진입/최고 상승률) | 화면에 보이는 행들의 집계값                                        | 클라이언트에서 계산                          | 필드만 있으면 프론트 집계 유지 가능 — 별도 컬럼 불필요                                                                       |
 | 워치리스트 카드                          | keyword, meta 설명, score                                          | `watchItems` 정적 배열                       | `watchlist_items ⋈ keywords ⋈ trend_snapshots`(최신 score)                                                                   |
+| 관심 키워드 즐겨찾기(★, 랭킹 행)         | keyword                                                             | `localStorage`(`td-saved-keywords`)          | 위 워치리스트 카드와 **같은 `watchlist_items` 테이블로 통합** — 로그인 붙기 전까지는 `localStorage` 유지가 맞고, 붙는 시점에 두 UI를 하나의 저장 목록으로 합쳐야 함                |
 | 수집 버튼 결과 메시지                    | 수집된 키워드 개수                                                 | `POST /api/admin/collect/pipeline` 응답 JSON | `collection_runs.keyword_count`                                                                                              |
 | 실시간 하이라이트 티커                   | keyword, kind(new/surge), delta                                    | `getTickerItems()`(트렌드 타임라인 mock)     | 별도 테이블 불필요 — 최근 두 `run_id`의 `trend_snapshots.rank`를 비교해 신규 진입/급등을 판정하는 쿼리(6.3 참고)              |
 
@@ -154,7 +155,6 @@
 erDiagram
   CATEGORIES ||--o{ KEYWORDS : classifies
   SOURCES ||--o{ RAW_SIGNALS : produces
-  SOURCES ||--o{ TREND_SNAPSHOTS : attributes
   COLLECTION_RUNS ||--o{ RAW_SIGNALS : captures
   COLLECTION_RUNS ||--o{ TREND_SNAPSHOTS : produces
   KEYWORDS ||--o{ TREND_SNAPSHOTS : tracks
@@ -162,6 +162,7 @@ erDiagram
   KEYWORDS ||--o{ KEYWORD_RELATIONS : "related to"
   KEYWORDS ||--o{ WATCHLIST_ITEMS : "saved as"
   USERS ||--o{ WATCHLIST_ITEMS : owns
+  KEYWORD_VERDICTS |o--o| KEYWORDS : "promotes to (canonical → term)"
 
   CATEGORIES {
     int id PK
@@ -186,6 +187,10 @@ erDiagram
     int keyword_count
     jsonb api_call_log
     text error_message
+    timestamptz bucket_at
+    int window_hours
+    int buckets
+    boolean filtered
   }
   KEYWORDS {
     int id PK
@@ -199,22 +204,24 @@ erDiagram
   RAW_SIGNALS {
     bigint id PK
     int run_id FK
+    int source_id FK
     varchar source
     text text
     varchar text_hash
     varchar video_id
     jsonb meta
+    timestamptz bucket_at
     timestamptz captured_at
   }
   TREND_SNAPSHOTS {
     bigint id PK
     int keyword_id FK
     int run_id FK
-    int source_id FK
     int rank
     int score
     varchar growth_rate
     varchar velocity
+    int mentions
     text summary
     jsonb reasons
     varchar source_label
@@ -243,13 +250,27 @@ erDiagram
   USERS {
     int id PK
     varchar email UK
+    text password_hash
+    varchar name
+    timestamptz email_verified_at
     timestamptz created_at
+    timestamptz updated_at
   }
   WATCHLIST_ITEMS {
     int id PK
     int user_id FK
     int keyword_id FK
     timestamptz added_at
+  }
+  KEYWORD_VERDICTS {
+    varchar term PK
+    boolean keep
+    varchar canonical
+    varchar content_type
+    text reason
+    text sample
+    varchar model
+    timestamptz decided_at
   }
 ```
 
@@ -261,13 +282,19 @@ erDiagram
 | `categories` 테이블 신설, `keywords.category_id` FK로 전환                          | 자유 텍스트 → 마스터 목록. `sort_order`로 UI 탭 순서 고정, 필터 UI가 "존재하는 값"이 아니라 "정의된 값"을 기준으로 렌더                   |
 | `collection_runs`를 마스터 개념으로 승격(vhe 전용 → 공통), `pipeline` 컬럼으로 구분 | master/vhe 파이프라인이 같은 실행 로그·API 호출 기록 구조를 공유하도록                                                                   |
 | `raw_signals`도 공통화                                                              | 재수집 시 텍스트 해시 dedup은 모든 파이프라인에 유용한 기능이라 master 전용 제외할 이유 없음                                              |
-| `trend_snapshots.run_id`, `rank`, `source_id` 추가                                  | run 단위로 "이 실행에서의 순위"를 남겨야 `/explore` 히트맵·A/B 비교가 실제 데이터로 그려짐(5.2 참고)                                      |
+| `trend_snapshots.run_id`, `rank` 추가                                               | run 단위로 "이 실행에서의 순위"를 남겨야 `/explore` 히트맵·A/B 비교가 실제 데이터로 그려짐(5.2 참고). (`source_id`는 검토 중 제외 — 한 키워드가 여러 소스에서 동시에 잡힐 수 있어 단일 FK로 못 담고, `reasons`/`source_label`이 이미 그 정보를 표현함) |
 | `trend_snapshots.reason`(text) → `reasons`(jsonb)                                   | `/trend` 상세의 "AI 요약 · 왜 뜨나" 섹션이 `{source, text}` 배열을 요구(5.3 참고) — 단일 텍스트로는 소스별 근거를 분리해 렌더링할 수 없음 |
 | `trend_contents.thumbnail_url`, `metric_label` 추가                                 | 상세 페이지 "관련 콘텐츠" 카드가 썸네일과 참여 지표 문자열(예: "저장 12.4K")을 요구하는데 기존 컬럼에 없던 필드(5.3 참고)                 |
 | `keyword_relations` 신설                                                            | 상세 페이지 "연관 키워드" 칩을 mock 배열이 아니라 co-occurrence 점수 기반으로 생성                                                        |
-| `users`, `watchlist_items` 신설                                                     | 워치리스트를 실제 저장 기능으로 만들려면 최소한의 계정 개념 필요(익명 디바이스 토큰으로 시작해도 무방)                                    |
+| `users`, `watchlist_items` 신설                                                     | 워치리스트를 실제 저장 기능으로 만들려면 최소한의 계정 개념 필요(익명 디바이스 토큰으로 시작해도 무방). 또한 현재 두 갈래인 저장 UI(워치리스트 패널의 `watchItems`, 랭킹 행의 `localStorage` 즐겨찾기 ★)를 이 테이블 하나로 합치는 마이그레이션이 함께 필요               |
 | `varchar(500)` → `text` (url류)                                                     | 유튜브/뉴스 URL에 트래킹 파라미터가 붙으면 500자를 넘는 경우가 실제로 있음                                                                |
 | PK를 `bigint`로(스냅샷/콘텐츠/신호)                                                 | 시계열 수집을 촘촘하게(예: 시간당) 돌리면 `integer` 범위를 오래 못 감                                                                     |
+| `collection_runs.bucket_at`/`window_hours`/`buckets`/`filtered` 추가                | `trend-rising` 파이프라인(PR #23)에서 검증된 필드. 실행이 참조한 데이터 기준 시각·집계 창 길이·창 내 실제 버킷 수·LLM 필터 적용 여부를 남겨야 수집 누락 감지·결과 재현이 가능      |
+| `raw_signals.source_id`(FK → sources) 추가                                          | 기존 `source`(신호 종류)만으로는 다중 커뮤니티 소스가 늘어날 때 "어느 사이트"인지 구분 불가. 이미 그려진 `SOURCES ||--o{ RAW_SIGNALS` 관계를 실제 컬럼으로 채움 |
+| `raw_signals.bucket_at` 추가                                                        | 수집이 귀속되는 1시간 버킷. 중복 제거(`UNIQUE(source_id, text_hash, bucket_at)`)와 체류시간 기반 가중치 계산에 필요                       |
+| `trend_snapshots.mentions` 추가                                                     | `growth_rate` 같은 표시용 문자열의 근거가 되는 원시 언급 횟수(raw count) — 표시값만 있고 원인 수치가 없던 문제 보완                       |
+| `trend_snapshots.reasons`(jsonb) 항목에 `sample`/`weight` 추가                       | `sample`(근거 원문 인용)·`weight`(소스별 기여 점수)를 붙여 "왜 떴는지"를 재구성 없이 바로 보여줄 수 있게 함                              |
+| `keyword_verdicts` 테이블 신설                                                      | 토크나이저가 훼손한 단어 복원(`오디세`→`오디세이`), 노이즈 필터링(`같아서`, `대한` 등)을 LLM이 판정하고 캐싱하는 계층. `keep=true`인 term만 `keywords`로 승격 |
 
 ### 6.3 스키마 변경 없이 쿼리로 해결되는 것들
 
