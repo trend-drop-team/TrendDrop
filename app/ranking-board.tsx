@@ -6,23 +6,18 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { CATEGORY_EVENT, PENDING_CATEGORY_KEY } from "@/app/command-palette";
 import { INTERESTS_EVENT, INTERESTS_KEY } from "@/app/onboarding";
 import RollingNumber from "@/app/rolling-number";
-import { getRankDelta, type TrendItem } from "@/lib/trend-data";
-import { getTickerItems, snapshots } from "@/lib/trend-timeline";
+import type { TimelineSnapshot, TrendRow } from "@/lib/api/types";
+import { getRankDelta } from "@/lib/trend-data";
 
 type Period = "realtime" | "daily";
 
-/** 시계열 RankedItem과 정적 TrendItem 양쪽을 받는 공통 행 형태. */
-type Row = {
-  keyword: string;
-  category: string;
-  rank: number;
-  previousRank?: number | null;
-  growth: string;
-  spark?: number[];
-};
+/** 실시간 스냅샷과 24시간 집계가 공유하는 행 형태 — 둘 다 API의 TrendRow다. */
+type Row = TrendRow;
 
 type Props = {
-  daily: TrendItem[];
+  /** 시점별 랭킹(오래된 → 최신). 타임머신 슬라이더의 눈금이자 실시간 탭의 데이터 소스. */
+  snapshots: TimelineSnapshot[];
+  daily: TrendRow[];
   categories: string[];
 };
 
@@ -36,7 +31,6 @@ const PLAY_INTERVAL_MS = 1200;
 const FLIP_MS = 520;
 const FLIP_EASING = "cubic-bezier(0.34, 1.56, 0.64, 1)";
 const PULL_THRESHOLD = 70;
-const LATEST_INDEX = snapshots.length - 1;
 const SAVED_KEY = "td-saved-keywords";
 const PREVIEW_DELAY_MS = 250;
 /** 관심 키워드 "급상승" 판정: NEW이거나 5계단 이상 상승. */
@@ -156,10 +150,12 @@ function DeltaBadge({ item }: { item: Row }) {
   );
 }
 
-export default function RankingBoard({ daily, categories }: Props) {
+export default function RankingBoard({ snapshots, daily, categories }: Props) {
+  const latestIndex = snapshots.length - 1;
+
   const [period, setPeriod] = useState<Period>("realtime");
   const [category, setCategory] = useState<string>("전체");
-  const [snapshotIndex, setSnapshotIndex] = useState<number>(LATEST_INDEX);
+  const [snapshotIndex, setSnapshotIndex] = useState<number>(latestIndex);
   const [live, setLive] = useState(true);
   const [playing, setPlaying] = useState(false);
   const [pull, setPull] = useState(0);
@@ -180,9 +176,9 @@ export default function RankingBoard({ daily, categories }: Props) {
   const isRealtime = period === "realtime";
   const snapshot = snapshots[snapshotIndex];
 
-  const rows: Row[] = isRealtime ? snapshot.items : daily;
+  const rows: Row[] = isRealtime ? snapshot.rows : daily;
 
-  // 프리뷰의 "왜 뜨나" 한 줄은 daily(TrendItem.reason)에서 가져온다(스냅샷 아이템엔 reason 없음).
+  // 프리뷰의 "왜 뜨나" 한 줄 — 행 자체에 reason이 비어 있을 때 24시간 집계 쪽 문구로 메운다.
   const reasonByKeyword = useMemo(
     () => new Map(daily.map((item) => [item.keyword, item.reason])),
     [daily],
@@ -208,8 +204,8 @@ export default function RankingBoard({ daily, categories }: Props) {
   );
 
   const tickerItems = useMemo(
-    () => (isRealtime ? getTickerItems(snapshot.id) : []),
-    [isRealtime, snapshot.id],
+    () => (isRealtime ? snapshot.ticker : []),
+    [isRealtime, snapshot.ticker],
   );
 
   const summary = useMemo(() => {
@@ -222,7 +218,7 @@ export default function RankingBoard({ daily, categories }: Props) {
 
   const advance = useCallback(() => {
     setSnapshotIndex((index) => (index + 1) % snapshots.length);
-  }, []);
+  }, [snapshots.length]);
 
   /* --- LIVE 자동 갱신 (시간 진행은 오직 여기서만 일어난다) --- */
   /* 프리뷰가 열려 있는 동안(=행 호버 중)엔 자동 진행을 멈춘다 — 행이 밑으로 사라지며 프리뷰가 붕 뜨는 것 방지. */
@@ -238,12 +234,12 @@ export default function RankingBoard({ daily, categories }: Props) {
 
     const timer = window.setTimeout(() => {
       const next = snapshotIndex + 1;
-      setSnapshotIndex(Math.min(next, LATEST_INDEX));
-      if (next >= LATEST_INDEX) setPlaying(false);
+      setSnapshotIndex(Math.min(next, latestIndex));
+      if (next >= latestIndex) setPlaying(false);
     }, PLAY_INTERVAL_MS);
 
     return () => window.clearTimeout(timer);
-  }, [playing, isRealtime, snapshotIndex]);
+  }, [playing, isRealtime, snapshotIndex, latestIndex]);
 
   /* --- 커맨드 팔레트에서 고른 카테고리 수신 (useSearchParams 대신 커스텀 이벤트) --- */
   useEffect(() => {
@@ -471,7 +467,7 @@ export default function RankingBoard({ daily, categories }: Props) {
 
   const pullReady = pull >= PULL_THRESHOLD;
   // LIVE로 순환 중일 때는 "과거"가 아니라 실시간 피드로 본다.
-  const viewingPast = isRealtime && !live && snapshotIndex !== LATEST_INDEX;
+  const viewingPast = isRealtime && !live && snapshotIndex !== latestIndex;
 
   /* --- 타임머신 ↔ LIVE 상호작용 규칙 --- */
 
@@ -489,7 +485,7 @@ export default function RankingBoard({ daily, categories }: Props) {
       return;
     }
     setLive(false);
-    if (snapshotIndex >= LATEST_INDEX) setSnapshotIndex(0);
+    if (snapshotIndex >= latestIndex) setSnapshotIndex(0);
     setPlaying(true);
   };
 
@@ -500,13 +496,13 @@ export default function RankingBoard({ daily, categories }: Props) {
       return;
     }
     setPlaying(false);
-    setSnapshotIndex(LATEST_INDEX);
+    setSnapshotIndex(latestIndex);
     setLive(true);
   };
 
   const handleJumpToNow = () => {
     setPlaying(false);
-    setSnapshotIndex(LATEST_INDEX);
+    setSnapshotIndex(latestIndex);
     setLive(true);
   };
 
@@ -595,7 +591,7 @@ export default function RankingBoard({ daily, categories }: Props) {
               type="range"
               className="tm-range"
               min={0}
-              max={LATEST_INDEX}
+              max={latestIndex}
               step={1}
               value={snapshotIndex}
               onChange={handleScrub}
@@ -612,9 +608,9 @@ export default function RankingBoard({ daily, categories }: Props) {
           <div className="tm-ticks" aria-hidden="true">
             {snapshots.map((entry, index) => (
               <span
-                key={entry.id}
+                key={entry.runId}
                 className={`tm-tick${index === snapshotIndex ? " is-active" : ""}${
-                  index === LATEST_INDEX ? " is-latest" : ""
+                  index === latestIndex ? " is-latest" : ""
                 }`}
               />
             ))}
@@ -751,7 +747,7 @@ export default function RankingBoard({ daily, categories }: Props) {
                 onMouseEnter={() => openPreview(item.keyword)}
                 onMouseLeave={closePreview}
               >
-                <Link href="/trend" className="rank-link">
+                <Link href={`/trend/${encodeURIComponent(item.slug)}`} className="rank-link">
                   <span className={`rank-num${item.rank <= 3 ? " is-top" : ""}`}>{item.rank}</span>
 
                   <span className="rank-main">
@@ -759,7 +755,7 @@ export default function RankingBoard({ daily, categories }: Props) {
                     <span className="rank-cat">{item.category}</span>
                   </span>
 
-                  {item.spark ? <MiniSpark points={item.spark} /> : null}
+                  {item.spark.length > 0 ? <MiniSpark points={item.spark} /> : null}
 
                   <DeltaBadge item={item} />
 
@@ -793,10 +789,12 @@ export default function RankingBoard({ daily, categories }: Props) {
                     </div>
                     <div className="rank-preview-metrics">
                       <span className="rank-preview-growth">+{growthValue(item.growth)}%</span>
-                      {item.spark ? <MiniSpark points={item.spark} /> : null}
+                      {item.spark.length > 0 ? <MiniSpark points={item.spark} /> : null}
                     </div>
                     <p className="rank-preview-why">
-                      {reasonByKeyword.get(item.keyword) ?? "SNS에서 반응이 빠르게 늘고 있습니다."}
+                      {item.reason ||
+                        reasonByKeyword.get(item.keyword) ||
+                        "SNS에서 반응이 빠르게 늘고 있습니다."}
                     </p>
                     <span className="rank-preview-cta">상세 보기 →</span>
                   </div>

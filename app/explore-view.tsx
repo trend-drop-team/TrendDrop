@@ -1,19 +1,51 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { PENDING_CATEGORY_KEY } from "@/app/command-palette";
-import { getSeriesForKeyword, type SeriesPoint } from "@/lib/trend-timeline";
+import type { HistoryPoint } from "@/lib/api/types";
 
 type Column = { clock: string; label: string; isLatest: boolean };
-type KeywordOption = { keyword: string; category: string; rank: number };
+type KeywordOption = { keyword: string; slug: string; category: string; rank: number };
+
+/** A/B 비교용 순위 궤적을 `GET /api/keywords/:slug/history`에서 가져온다. */
+function useKeywordHistory(slug: string, windowHours: number): HistoryPoint[] {
+  // 어느 slug의 응답인지 함께 들고 있다가, 요청 중인 키워드와 다르면 빈 배열을 반환한다.
+  // (이전 키워드의 궤적을 새 키워드의 선으로 잠깐 그리는 걸 막는다.)
+  const [loaded, setLoaded] = useState<{ slug: string; series: HistoryPoint[] }>({
+    slug: "",
+    series: [],
+  });
+
+  useEffect(() => {
+    if (!slug) return;
+
+    const controller = new AbortController();
+
+    fetch(`/api/keywords/${encodeURIComponent(slug)}/history?window=${windowHours}h`, {
+      signal: controller.signal,
+    })
+      .then((response) => (response.ok ? response.json() : Promise.reject(response.status)))
+      .then((payload: { data: HistoryPoint[] }) => setLoaded({ slug, series: payload.data }))
+      // 실패하면 해당 선만 비워 둔다 — 차트 전체를 죽이지 않는다.
+      .catch(() => {
+        if (!controller.signal.aborted) setLoaded({ slug, series: [] });
+      });
+
+    return () => controller.abort();
+  }, [slug, windowHours]);
+
+  return loaded.slug === slug ? loaded.series : [];
+}
 
 type Props = {
   columns: Column[];
   categories: string[];
   matrix: number[][];
   keywords: KeywordOption[];
+  /** 히트맵·A/B 비교가 함께 보는 구간 길이. history API의 `?window=`와 같은 값. */
+  windowHours: number;
 };
 
 type Delta =
@@ -31,7 +63,7 @@ const PAD_TOP = 16;
 const PAD_BOTTOM = 26;
 
 /** 최신 vs 직전 스냅샷 순위로 등락 계산 (시리즈만으로 self-contained). */
-function seriesDelta(series: SeriesPoint[]): Delta {
+function seriesDelta(series: HistoryPoint[]): Delta {
   const current = series[series.length - 1]?.rank ?? null;
   const previous = series[series.length - 2]?.rank ?? null;
   if (current === null) return { kind: "out" };
@@ -78,7 +110,7 @@ function yForRank(rank: number): number {
 }
 
 /** rank=null 구간은 선을 끊는다 → 연속 구간(run)들의 배열로 분해. */
-function runsOf(series: SeriesPoint[]): { i: number; rank: number }[][] {
+function runsOf(series: HistoryPoint[]): { i: number; rank: number }[][] {
   const runs: { i: number; rank: number }[][] = [];
   let current: { i: number; rank: number }[] = [];
   series.forEach((point, i) => {
@@ -98,7 +130,7 @@ function SeriesLine({
   className,
   count,
 }: {
-  series: SeriesPoint[];
+  series: HistoryPoint[];
   className: string;
   count: number;
 }) {
@@ -131,14 +163,27 @@ function SeriesLine({
   );
 }
 
-export default function ExploreView({ columns, categories, matrix, keywords }: Props) {
+export default function ExploreView({
+  columns,
+  categories,
+  matrix,
+  keywords,
+  windowHours,
+}: Props) {
   const router = useRouter();
 
-  const [keyA, setKeyA] = useState(keywords[0]?.keyword ?? "");
-  const [keyB, setKeyB] = useState(keywords[1]?.keyword ?? keywords[0]?.keyword ?? "");
+  const [slugA, setSlugA] = useState(keywords[0]?.slug ?? "");
+  const [slugB, setSlugB] = useState(keywords[1]?.slug ?? keywords[0]?.slug ?? "");
 
-  const seriesA = useMemo(() => getSeriesForKeyword(keyA), [keyA]);
-  const seriesB = useMemo(() => getSeriesForKeyword(keyB), [keyB]);
+  const nameBySlug = useMemo(
+    () => new Map(keywords.map((option) => [option.slug, option.keyword])),
+    [keywords],
+  );
+  const keyA = nameBySlug.get(slugA) ?? slugA;
+  const keyB = nameBySlug.get(slugB) ?? slugB;
+
+  const seriesA = useKeywordHistory(slugA, windowHours);
+  const seriesB = useKeywordHistory(slugB, windowHours);
   const deltaA = useMemo(() => seriesDelta(seriesA), [seriesA]);
   const deltaB = useMemo(() => seriesDelta(seriesB), [seriesB]);
 
@@ -237,12 +282,12 @@ export default function ExploreView({ columns, categories, matrix, keywords }: P
             <span className="compare-pick-tag">A</span>
             <select
               className="compare-select"
-              value={keyA}
-              onChange={(event) => setKeyA(event.target.value)}
+              value={slugA}
+              onChange={(event) => setSlugA(event.target.value)}
               aria-label="비교 키워드 A"
             >
               {keywords.map((option) => (
-                <option key={option.keyword} value={option.keyword}>
+                <option key={option.slug} value={option.slug}>
                   {option.rank}. {option.keyword}
                 </option>
               ))}
@@ -253,12 +298,12 @@ export default function ExploreView({ columns, categories, matrix, keywords }: P
             <span className="compare-pick-tag">B</span>
             <select
               className="compare-select"
-              value={keyB}
-              onChange={(event) => setKeyB(event.target.value)}
+              value={slugB}
+              onChange={(event) => setSlugB(event.target.value)}
               aria-label="비교 키워드 B"
             >
               {keywords.map((option) => (
-                <option key={option.keyword} value={option.keyword}>
+                <option key={option.slug} value={option.slug}>
                   {option.rank}. {option.keyword}
                 </option>
               ))}

@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 
-import { categories } from "@/lib/trend-data";
+import { getCategories, getTrends } from "@/lib/api/service";
 import { getDocList } from "@/lib/docs";
 
 import AppNav from "./app-nav";
@@ -15,7 +15,7 @@ export const metadata: Metadata = {
 // 첫 페인트 전에 저장된 테마를 적용해 FOUC(테마 깜빡임)를 막는다.
 const themeScript = `try{var t=localStorage.getItem('td-theme');if(t==='warm'||t==='dark')document.documentElement.dataset.theme=t;}catch(e){}`;
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
@@ -27,6 +27,17 @@ export default function RootLayout({
     description,
   }));
 
+  // 커맨드 팔레트는 모든 화면에 떠 있으므로 검색 대상도 여기서 한 번만 받아 내려준다.
+  const [categoryResult, trendResult] = await Promise.all([getCategories(), getTrends()]);
+
+  const categories = categoryResult.data.map((category) => category.name);
+  const paletteKeywords = trendResult.data.map((row) => ({
+    keyword: row.keyword,
+    slug: row.slug,
+    category: row.category,
+    rank: row.rank,
+  }));
+
   return (
     <html lang="ko" data-theme="dark" suppressHydrationWarning>
       <head>
@@ -36,7 +47,7 @@ export default function RootLayout({
         <AppNav />
         {children}
         {/* getDocList()는 fs를 쓰는 서버 전용이라 여기서 호출해 props로 내려준다. */}
-        <CommandPalette docs={paletteDocs} categories={categories} />
+        <CommandPalette docs={paletteDocs} categories={categories} keywords={paletteKeywords} />
       </body>
     </html>
   );

@@ -3,21 +3,28 @@
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { latestSnapshot } from "@/lib/trend-timeline";
-
 export type PaletteDoc = {
   slug: string;
   title: string;
   description: string;
 };
 
+/** 최신 run의 랭킹 키워드. 서버(layout)에서 API 계층으로 받아 내려준다. */
+export type PaletteKeyword = {
+  keyword: string;
+  slug: string;
+  category: string;
+  rank: number;
+};
+
 type Props = {
   docs: PaletteDoc[];
   categories: string[];
+  keywords: PaletteKeyword[];
 };
 
 type Result =
-  | { kind: "keyword"; id: string; label: string; category: string; rank: number }
+  | { kind: "keyword"; id: string; label: string; category: string; rank: number; slug: string }
   | { kind: "category"; id: string; label: string }
   | { kind: "doc"; id: string; label: string; description: string; slug: string };
 
@@ -39,7 +46,7 @@ function optionId(index: number): string {
   return `cmdk-option-${index}`;
 }
 
-export default function CommandPalette({ docs, categories }: Props) {
+export default function CommandPalette({ docs, categories, keywords: rankedKeywords }: Props) {
   const router = useRouter();
   const pathname = usePathname() ?? "/";
 
@@ -55,15 +62,16 @@ export default function CommandPalette({ docs, categories }: Props) {
     const q = query.trim().toLowerCase();
     const matches = (value: string) => value.toLowerCase().includes(q);
 
-    const keywords = latestSnapshot.items
+    const keywords = rankedKeywords
       .filter((item) => !q || matches(item.keyword) || matches(item.category))
       .slice(0, q ? MAX_KEYWORD_RESULTS : EMPTY_KEYWORD_SUGGESTIONS)
       .map<Result>((item) => ({
         kind: "keyword",
-        id: `keyword-${item.keyword}`,
+        id: `keyword-${item.slug}`,
         label: item.keyword,
         category: item.category,
         rank: item.rank,
+        slug: item.slug,
       }));
 
     const cats = categories
@@ -82,7 +90,7 @@ export default function CommandPalette({ docs, categories }: Props) {
       }));
 
     return [...keywords, ...cats, ...documents];
-  }, [query, categories, docs]);
+  }, [query, categories, docs, rankedKeywords]);
 
   // 결과가 줄어들어도 인덱스가 범위를 벗어나지 않도록 파생값으로 고정한다(효과에서 보정하지 않음).
   const active = results.length === 0 ? 0 : Math.min(activeIndex, results.length - 1);
@@ -142,7 +150,7 @@ export default function CommandPalette({ docs, categories }: Props) {
       close();
 
       if (result.kind === "keyword") {
-        router.push("/trend");
+        router.push(`/trend/${encodeURIComponent(result.slug)}`);
         return;
       }
       if (result.kind === "doc") {
