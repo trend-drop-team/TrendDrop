@@ -1,19 +1,20 @@
 /**
  * 백필 — 쌓아둔 raw_signals 전체를 시간순으로 되감아, 매 버킷마다 그 시점의
- * "지금 인기" 랭킹을 계산해 collection_runs / popular_snapshots에 채워 넣는다.
- * 매시간 job이 처음부터 돌았다면 나왔을 결과를 재구성하는 것.
+ * "지금 인기" 랭킹을 계산해 collection_runs(pipeline='trend-rising-popular') /
+ * trend_snapshots에 채워 넣는다. 매시간 job이 처음부터 돌았다면 나왔을 결과를 재구성하는 것.
  *
  * 각 시점 T: 창 = T를 포함한 직전 HOURS시간 (rank-popular.mjs와 같은 규칙).
  * 수집이 빠진 구간에서는 버킷 수가 줄어들 뿐 과거로 뻗지 않는다.
  *
  * 실행:  node trend-rising/backfill-popular.mjs [--reset]
  *   env: DATABASE_URL(필수), HOURS(기본 6), TOP_N(기본 10), POOL(기본 50)
- *   --reset : 기존 collection_runs/popular_snapshots를 비우고 새로 채운다.
+ *   --reset : 기존 trend-rising-popular run/trend_snapshots를 비우고 새로 채운다
+ *             (collect run/raw_signals는 건드리지 않음).
  *
  * 주의: statistics(조회수·좋아요)는 수집을 최근에 시작했으므로 과거 구간의
  * videoBoost는 대부분 ×1이다. trafficBoost(gtrends)는 전 구간 적용된다.
  */
-import { loadAllItems, savePopularRun, ensurePopularTables, closeDb } from "./store.mjs";
+import { loadAllItems, startRun, saveTrendSnapshots, finishRun, closeDb } from "./store.mjs";
 import { rankPopular } from "./popular.mjs";
 import { applyVerdicts } from "./verdict.mjs";
 
@@ -46,13 +47,16 @@ console.log(
 );
 console.log(`창 ${WINDOW_HOURS}시간, top${topN} → 시점 ${buckets.length}개 계산\n`);
 
-await ensurePopularTables();
 if (reset) {
+  // collection_runs는 이제 collect run과 공유하는 테이블이라 통째로 TRUNCATE하면
+  // raw_signals.run_id FK가 깨진다 — pipeline='trend-rising-popular'인 것만 지운다.
   const { default: postgres } = await import("postgres");
   const s = postgres(process.env.DATABASE_URL, { prepare: false, onnotice: () => {} });
-  await s`TRUNCATE popular_snapshots, collection_runs RESTART IDENTITY`;
+  await s`DELETE FROM trend_snapshots
+    WHERE run_id IN (SELECT id FROM collection_runs WHERE pipeline = 'trend-rising-popular')`;
+  await s`DELETE FROM collection_runs WHERE pipeline = 'trend-rising-popular'`;
   await s.end();
-  console.log("🧹 collection_runs / popular_snapshots 비움\n");
+  console.log("🧹 trend-rising-popular run / trend_snapshots 비움 (keywords는 유지)\n");
 }
 
 let runs = 0;
@@ -75,16 +79,20 @@ for (let i = 0; i < buckets.length; i++) {
   const { ranked, stats } = await applyVerdicts(pool, { topN, allowApi: false });
   if (ranked.length === 0) continue;
 
-  await savePopularRun(
-    {
-      bucketAt: buckets[i],
-      buckets: window.length,
-      rawSignalCount: windowRows.length,
-      windowHours: WINDOW_HOURS,
-      filtered: stats.filtered,
-    },
-    ranked
-  );
+  const runId = await startRun({
+    pipeline: "trend-rising-popular",
+    geo: "KR",
+    bucketAt: buckets[i],
+    windowHours: WINDOW_HOURS,
+    buckets: window.length,
+  });
+  await saveTrendSnapshots(runId, buckets[i], ranked);
+  await finishRun(runId, {
+    status: "success",
+    rawSignalCount: windowRows.length,
+    keywordCount: ranked.length,
+    filtered: stats.filtered,
+  });
   runs += 1;
   snapshots += ranked.length;
 
@@ -101,7 +109,7 @@ for (let i = 0; i < buckets.length; i++) {
   }
 }
 
-console.log(`\n💾 collection_runs ${runs}건 / popular_snapshots ${snapshots.toLocaleString()}건 저장`);
+console.log(`\n💾 popular run ${runs}건 / trend_snapshots ${snapshots.toLocaleString()}건 저장`);
 console.log(`   top10에 한 번이라도 든 키워드: ${firstSeen.size}개\n`);
 
 await closeDb();

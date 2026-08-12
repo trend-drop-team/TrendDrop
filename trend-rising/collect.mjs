@@ -13,7 +13,7 @@ import { collect as theqoo } from "./sources/theqoo.mjs";
 import { collect as instiz } from "./sources/instiz.mjs";
 import { collect as youtube } from "./sources/youtube.mjs";
 import { collect as gtrends } from "./sources/gtrends.mjs";
-import { insertRawItems, closeDb } from "./store.mjs";
+import { insertRawItems, startRun, finishRun, closeDb } from "./store.mjs";
 
 // 네이트판은 2026-08-03에 제외했다 — 사연·신변잡기 위주라 트렌드 키워드가 거의 안 나왔다.
 const ADAPTERS = [
@@ -82,8 +82,30 @@ async function main() {
     return;
   }
 
-  const saved = await insertRawItems(rows);
-  console.log(`\n💾 raw_signals 저장(신규): ${saved}건`);
+  // 이 실행 자체를 collection_runs에 남긴다(pipeline='trend-rising-collect').
+  // raw_signals.run_id가 이 값을 가리킨다 — 랭킹 run(trend-rising-popular)과는 별개.
+  const runId = await startRun({ pipeline: "trend-rising-collect", geo: "KR", bucketAt: bucket });
+  const apiCallLog = results.map((r) => ({ source: r.name, items: r.items.length, error: r.error ?? null }));
+  const errored = results.filter((r) => r.error);
+  const status = errored.length === 0 ? "success" : errored.length === results.length ? "error" : "partial";
+
+  try {
+    const saved = await insertRawItems(rows, runId);
+    console.log(`\n💾 raw_signals 저장(신규): ${saved}건`);
+    await finishRun(runId, {
+      status,
+      rawSignalCount: rows.length,
+      apiCallLog,
+      errorMessage: errored.length ? errored.map((r) => `${r.name}: ${r.error}`).join("; ") : null,
+    });
+  } catch (err) {
+    await finishRun(runId, {
+      status: "error",
+      apiCallLog,
+      errorMessage: err instanceof Error ? err.message : String(err),
+    });
+    throw err;
+  }
 }
 
 main()

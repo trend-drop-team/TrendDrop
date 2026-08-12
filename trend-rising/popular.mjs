@@ -145,6 +145,8 @@ export function rankPopular(rows, options = {}) {
           sources: new Map(), // source → 가중합
           units: new Set(),
           sample: row.text,
+          boostSum: 0, // velocity(확산 속도) 산출용 — 참여도 보정값의 누적
+          boostCount: 0,
         };
         acc.set(token, entry);
       }
@@ -152,6 +154,8 @@ export function rankPopular(rows, options = {}) {
       entry.mentions += 1;
       entry.sources.set(row.site, (entry.sources.get(row.site) ?? 0) + weight);
       entry.units.add(key);
+      entry.boostSum += boost;
+      entry.boostCount += 1;
     }
   }
 
@@ -178,6 +182,9 @@ export function rankPopular(rows, options = {}) {
       sources,
       units: [...entry.units],
       sample: entry.sample,
+      // 확산 속도(0~10) — 참여도 보정(videoBoost/trafficBoost/commentBoost)의 평균.
+      // 보정 없는 커뮤니티만 언급되면 1에 가깝고, 조회수·좋아요·검색량이 높을수록 커진다.
+      velocity: clamp(entry.boostSum / Math.max(entry.boostCount, 1), 0.5, 10),
     });
   }
 

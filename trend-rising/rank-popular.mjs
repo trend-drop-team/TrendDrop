@@ -12,7 +12,7 @@
  * LLM 필터는 후보를 POOL개로 넓게 뽑은 뒤 걸러 topN을 채운다.
  * 판정에서 40% 안팎이 탈락·병합되므로 topN만 뽑으면 최종이 모자란다.
  */
-import { loadRecentItems, savePopularRun, closeDb } from "./store.mjs";
+import { loadRecentItems, startRun, saveTrendSnapshots, finishRun, closeDb } from "./store.mjs";
 import { rankPopular, WEIGHTS } from "./popular.mjs";
 import { applyVerdicts } from "./verdict.mjs";
 
@@ -99,10 +99,16 @@ ranked.forEach((k, i) => {
 console.log("");
 
 if (save) {
-  const runId = await savePopularRun(
-    { bucketAt, buckets, rawSignalCount: rows.length, windowHours, filtered: stats.filtered },
-    ranked
-  );
+  // 랭킹 run은 수집 run과 별개다(pipeline='trend-rising-popular') — trend-rising은
+  // 수집·랭킹이 분리돼 있어 이 run이 raw_signals가 아니라 trend_snapshots를 소유한다.
+  const runId = await startRun({ pipeline: "trend-rising-popular", geo: "KR", bucketAt, windowHours, buckets });
+  await saveTrendSnapshots(runId, bucketAt, ranked);
+  await finishRun(runId, {
+    status: "success",
+    rawSignalCount: rows.length,
+    keywordCount: ranked.length,
+    filtered: stats.filtered,
+  });
   console.log(`💾 popular run #${runId} 저장 — snapshots ${ranked.length}건\n`);
 }
 
