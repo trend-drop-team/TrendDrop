@@ -334,31 +334,42 @@ launchctl bootstrap "gui/$(id -u)" ~/Library/LaunchAgents/com.trendrising.hourly
 ```
 (plist 라벨은 아직 `com.trendrising.hourly` — 바꾸려면 파일명·라벨 변경 후 재등록)
 
-**워크플로 뼈대** (`.github/workflows/pipeline.yml` — 아직 안 만듦):
+**워크플로 (작성 완료 — 파일에 주석으로 근거를 달아뒀다):**
 
-```yaml
-name: hourly pipeline
-on:
-  schedule:
-    - cron: "5 * * * *"     # UTC. 정각이 아니라 5분 뒤 — 아래 ② 참고
-  workflow_dispatch:         # 수동 실행 버튼 (디버깅에 필수)
-
-jobs:
-  run:
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: 22, cache: npm }
-      - run: npm ci
-      - run: node pipeline/collect.mjs
-      - run: node pipeline/rank-popular.mjs --save
-    env:
-      DATABASE_URL:      ${{ secrets.DATABASE_URL }}
-      YOUTUBE_API_KEY:   ${{ secrets.YOUTUBE_API_KEY }}
-      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
 ```
+.github/workflows/collect.yml   cron "5 * * * *"      매시간
+.github/workflows/rank.yml      cron "20 */2 * * *"   2시간마다
+```
+
+**하나가 아니라 둘로 나눴다.** 이유가 셋이다.
+
+1. **Claude 비용이 `rank`에만 붙는다.** `collect.mjs`는 sources/ + store.mjs만 부르고
+   LLM을 호출하지 않는다. 호출은 `rank-popular.mjs → verdict.mjs`에서만 일어난다.
+2. **`collect`를 늦추면 되돌릴 수 없다.** 버킷이 1시간 단위라 수집을 거르면 그 시간대의
+   글은 이미 사라져 복구가 안 되고, 체류시간 신호(§7 버킷)가 절반 해상도로 뭉개진다.
+   반대로 `rank`는 원문만 있으면 언제든 다시 계산된다(`backfill-popular.mjs`).
+3. **따로 켜고 끌 수 있다.** 파이프라인을 개선하는 동안 `rank`만 끄고 `collect`는
+   계속 쌓게 둘 수 있다.
+
+`rank`가 2시간인 것은 **앱 개발 중 Claude 비용을 아끼기 위한 임시 설정**이다.
+공개해서 신선도가 중요해지면 `"20 * * * *"`로 바꾸면 된다. `keyword_verdicts` 캐시가
+데워질수록 신규 판정 건수가 줄어 호출 비용도 함께 내려간다.
+
+**시각을 :05와 :20으로 어긋나게 뒀다.** 같은 시각이면 `rank`가 `collect`가 아직 쓰는
+중인 버킷을 읽어 반쪽짜리 집계가 나온다.
+
+**YouTube 할당량은 여유롭다.** `youtube.mjs`가 비싼 `search.list`(100 units)를 쓰지 않고
+`videos?chart=mostPopular`(1) + 영상당 `commentThreads`(1)만 쓴다 → 실행당 약 21 units,
+매시간 돌려도 하루 ~500 units로 무료 한도 10,000의 5%다.
+
+> **`npm ci`가 아니라 `npm ci --omit=dev`를 쓴다.** 파이프라인은 devDependencies
+> (drizzle-kit·typescript·eslint)를 쓰지 않는다. `pipeline/**`의 외부 import는
+> `postgres`와 `@anthropic-ai/sdk` 둘뿐이고 모두 dependencies에 있다.
+>
+> ⚠️ **`@anthropic-ai/sdk`가 `package.json`에 선언돼 있지 않았다** — `node_modules`에만
+> 있고 lock에도 없었다. 로컬에선 이미 설치돼 있어 돌지만 `npm ci`는 lock에 적힌 것만
+> 설치하므로 **러너에서 `rank`가 LLM 호출 직전에 죽었을 것이다.** `^0.115.0`으로
+> dependencies에 추가했다(2026-08-16).
 
 `run-hourly.sh`는 절대 경로(`/Users/yang/...`)·nvm 경로·로컬 pg 기동 로직이 박혀 있어
 그대로 못 쓴다. 실제로 필요한 건 위의 두 줄뿐이다.
