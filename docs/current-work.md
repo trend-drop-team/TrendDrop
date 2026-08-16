@@ -68,8 +68,9 @@ db/schema.ts (구)               ← 통합 스키마와 테이블 이름이 충
 
 로그 3개(`launchd.err.log` `launchd.out.log` `hourly.log`)를 삭제했다.
 
-> ⚠️ **미확인 항목:** 로그의 키는 현재 `.env.local`의 키와 **다르다**(해시 비교).
-> 이미 교체한 것으로 보이나, **옛 키가 Anthropic 콘솔에서 폐기됐는지 확인 필요.**
+> ✅ **해소됨 (2026-08-16).** 옛 키는 Anthropic 콘솔에서 폐기하고 새 키를 발급받아
+> `.env.local`에 넣었다. 유출된 키는 죽어 있다. (로그의 키가 현재 키와 해시가 다른 것도
+> 이 때문이었다.)
 
 ### 1-4. Neon 이전 — DB를 실제로 띄웠다
 
@@ -313,7 +314,6 @@ drizzle과 역할이 겹치지 않는다. 손볼 건 `run-hourly.sh` 하나인�
       이때 `DATABASE_URL_POOLED`를 쓴다(1-4절). 요청마다 접속이 생기므로 direct는 상한에 걸린다.
 - [ ] **`raw_signals` 정리 정책** — 무료 0.5GB에 6개월 시한이 붙어 있다 (3절 표)
 - [ ] `pipeline/TODO.md`의 미해결 과제 5건 (이슈 파편화, 카테고리 계수 등)
-- [ ] **옛 `ANTHROPIC_API_KEY` 폐기 확인** (1-3절 미확인 항목 — 아직 안 함)
 
 > **`005` 마이그레이션은 실행할 필요가 없어졌다.** `collection_runs.pipeline` 값에서
 > `trend-rising-` 접두사를 떼는 UPDATE였는데, Neon에서 새로 시작했으므로 그런 값을 가진
