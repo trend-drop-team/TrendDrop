@@ -9,7 +9,7 @@
 #   나중에 앱을 공개해서 신선도가 중요해지면 cron을 "20 * * * *"(매시간)로 바꾸면 된다.
 #   keyword_verdicts 캐시가 데워질수록 신규 판정 건수가 줄어 호출 비용도 함께 내려간다.
 #
-# 문서: docs/current-work.md §4
+# 문서: pipeline/PIPELINE.md 8-3
 
 name: rank (2h)
 

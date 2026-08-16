@@ -2,24 +2,24 @@
 
 커뮤니티·유튜브·구글트렌드에서 매시간 원문을 긁어와, **"지금 많이 언급되는 키워드" top10**을 만들어 Postgres에 쌓는다. 원래는 "평소 대비 갑자기 늘어난 단어"를 뽑는 급상승(rising) 방식이었으나 **인기(popular) 방식으로 전환**했다. 예전 폴더 이름 `trend-rising/`이 그때의 잔재였고, 이번에 `pipeline/`으로 정리했다 — `rank-popular.mjs`·`backfill-popular.mjs`처럼 파일 이름은 이미 현재 방식(popular)을 따르고 있었다.
 
-**스키마는 `db/schema.ts`가 소유한다.** 이 파이프라인은 테이블을 스스로 만들지 않고(`store.mjs`가 DDL을 안 함), 이미 존재하는 스키마에 데이터만 넣는다. 처음 셋업할 때 한 번:
-
-```bash
-npm run db:push   # = drizzle-kit push --config=drizzle.config.mjs
-```
+**스키마는 `db/schema.ts`가 소유한다.** 이 파이프라인은 테이블을 스스로 만들지 않고(`store.mjs`가 DDL을 안 함), 이미 존재하는 스키마에 데이터만 넣는다. DB는 **Neon**(클라우드 Postgres)이고, 스키마 반영은 **drizzle-kit**이 한다 — 구성과 절차는 8장.
 
 ---
 
 ## 0. 전체 흐름
 
+**수집과 랭킹은 이제 서로 다른 주기로 따로 돈다.** GitHub Actions 워크플로가 각각 하나씩이다.
+
 ```
-매시 정각 (launchd → run-hourly.sh)
+collect.yml — 매시 :05  (cron "5 * * * *")
     │
-    ├─▶ collect.mjs ─────────────────────────────────────────
-    │     collection_runs 1행 생성 (pipeline='collect')
-    │     5개 소스 병렬 스크래핑
-    │     raw_signals에 N행 INSERT (run_id = 방금 만든 run)
-    │     collection_runs 그 행 UPDATE (status/raw_signal_count)
+    └─▶ collect.mjs ─────────────────────────────────────────
+          collection_runs 1행 생성 (pipeline='collect')
+          5개 소스 병렬 스크래핑
+          raw_signals에 N행 INSERT (run_id = 방금 만든 run)
+          collection_runs 그 행 UPDATE (status/raw_signal_count)
+
+rank.yml — 2시간마다 :20  (cron "20 */2 * * *")
     │
     └─▶ rank-popular.mjs --save ─────────────────────────────
           최근 6시간 raw_signals 읽기 (SELECT만)
@@ -32,6 +32,12 @@ npm run db:push   # = drizzle-kit push --config=drizzle.config.mjs
             trend_snapshots에 top10 INSERT (run_id = 방금 만든 run, keyword_id로 연결)
             collection_runs 그 행 UPDATE (keyword_count)
 ```
+
+**둘의 주기가 다른 이유.** Claude 호출은 `rank`(→`verdict.mjs`)에만 있고 `collect`은 LLM을 쓰지 않는다. 그런데 **`collect`을 늦추면 되돌릴 수 없다** — 버킷이 1시간 단위라 거른 시간대의 글은 이미 사라져 복구가 안 되고, 체류시간 신호(1장)가 절반 해상도로 뭉개진다. 반대로 `rank`는 원문만 있으면 언제든 다시 계산된다. 그래서 **원문 수집은 촘촘하게, 비싼 계산은 성기게** 둔다.
+
+`rank`가 2시간인 건 앱 개발 중 비용을 아끼기 위한 임시 설정이다. 신선도가 중요해지면 `"20 * * * *"`로 바꾸면 된다.
+
+**시각을 :05와 :20으로 어긋나게 뒀다.** 같은 시각이면 `rank`가 `collect`이 아직 쓰는 중인 버킷을 읽어 반쪽짜리 집계가 나온다.
 
 **수집과 랭킹이 분리된 게 핵심이다.** 원문이 DB에 남아 있으므로 가중치를 바꿔도 API를 다시 호출하지 않고 과거 전 구간을 재계산할 수 있다(`backfill-popular.mjs`). LLM 판정도 같은 이유로 캐시에 저장한다 — 비싼 건 한 번, 싼 건 언제든.
 
@@ -192,12 +198,18 @@ velocity: clamp(entry.boostSum / entry.boostCount, 0.5, 10);
 
 ### 캐시가 비용의 핵심
 
-창이 6시간인데 1시간씩만 밀려서, 연속한 두 실행의 후보 50개가 85%쯤 겹친다. **LLM엔 매시간 1회, 50개가 전부지만 캐시 히트로 실제 신규 판정은 5~10개뿐** — 시간당 60초 걸리던 게 0.13초로.
+창이 6시간이고 실행 간격이 그보다 짧아서, 연속한 두 실행의 후보 50개가 크게 겹친다. **LLM에 보내는 건 실행당 최대 50개지만 캐시 히트로 실제 신규 판정은 그중 일부뿐** — 호출이 60초에서 0.13초로 떨어진다.
 
-|              | 캐시 없음 | 캐시 있음  |
-| ------------ | --------- | ---------- |
-| 월 판정 횟수 | 36,500회  | 약 5,000회 |
-| 이후 호출    | 60초      | **0.13초** |
+**겹치는 비율은 실행 주기에 따라 달라진다.** 창 6시간 기준으로:
+
+| 실행 주기 | 창 겹침 | 월 실행 | 판정 시도(50개 기준) |
+| --------- | ------- | ------- | -------------------- |
+| 1시간 (예전 launchd) | 5/6 ≈ 83% | 730회 | 36,500회 |
+| **2시간 (현재 rank.yml)** | **4/6 ≈ 67%** | **360회** | **18,000회** |
+
+주기를 늘리면 실행 횟수는 절반이 되지만 겹침이 줄어 **실행당 신규 판정은 늘어난다.** 그래서 실제 LLM 비용은 정확히 절반이 아니라 그보다 조금 덜 준다.
+
+> ⚠️ **캐시 히트율 실측값은 아직 없다.** Neon에서 새로 시작하면서 `keyword_verdicts`를 비웠다 — 2026-08-16 첫 실행은 `후보 50 → 캐시 0 / 신규 49`였다. 며칠 쌓인 뒤 다시 재야 한다. (`collection_runs`에 실행별 기록이 남으므로 사후 계산 가능)
 
 **한계**: 캐시 키가 term 단일이라 맥락이 바뀌어도 판정이 유지된다(`일본`이 재난 맥락으로 캐싱되면 나중에 잡담 맥락에서도 그대로). 교정: `DELETE FROM keyword_verdicts WHERE term = '일본'`.
 
@@ -295,11 +307,10 @@ reasons=[{"source":"youtube","weight":43,"text":"NCT 127 엔시티 127 'Piñata'
 ## 6. 실행 방법
 
 ```bash
-# 최초 1회 — 스키마 반영
-npm run db:push
+# 정기 실행은 GitHub Actions가 한다 (8장) — 아래는 전부 수동용
 
-# 매시간 자동 (launchd → run-hourly.sh)
-#   collect.mjs → rank-popular.mjs --save
+npm run collect     # 5소스 수집 → raw_signals
+npm run rank        # 최근 6시간 랭킹 계산 → trend_snapshots (--save 포함)
 
 # 수동 확인 (DB에 안 씀)
 node pipeline/rank-popular.mjs
@@ -318,9 +329,13 @@ node pipeline/backfill-popular.mjs --reset
 
 `backfill-popular.mjs --reset`은 `popular` run과 그 `trend_snapshots`만 지우고 다시 채운다(`collect` run·`raw_signals`는 안 건드림). 가중치나 카테고리 계수를 고치고 이걸 돌리면 전체 시계열이 새 기준으로 재생성된다 — **API 호출 0회.**
 
-### 스케줄
+> `npm run collect` / `npm run rank`은 `--env-file=.env.local`이 붙어 있다. 러너에는 `.env.local`이 없으므로(gitignore) 워크플로는 `node pipeline/*.mjs`를 직접 부르고 Secrets를 `env:`로 주입한다.
 
-`~/Library/LaunchAgents/com.trendrising.hourly.plist`가 매시 정각에 `run-hourly.sh`(collect → rank-popular --save)를 실행한다. 맥이 꺼지거나 잠들면 그 시간은 비고, launchd는 놓친 시간을 소급 채우지 않는다.
+### 스케줄 — launchd(구) → GitHub Actions(현재)
+
+**예전:** `~/Library/LaunchAgents/com.trendrising.hourly.plist`가 매시 정각에 `run-hourly.sh`를 실행했다. 맥이 꺼지거나 잠들면 그 시간이 통째로 비었고 소급도 안 됐다. **현재 이 작업은 `disabled` 상태이고 마지막 실행 로그는 2026-08-04다.**
+
+`run-hourly.sh`는 절대 경로(`/Users/yang/...`)·nvm 경로·로컬 pg 기동 로직이 박혀 있어 러너에서 못 쓴다. **Actions에서는 아예 호출하지 않는다** — 실제로 필요한 건 `node pipeline/collect.mjs` 한 줄뿐이었다.
 
 ---
 
@@ -338,6 +353,119 @@ node pipeline/backfill-popular.mjs --reset
 | `backfill-popular.mjs` | 전 기간 재생성(캐시만 읽음)         | ❌       |
 | `store.mjs`            | Postgres 저장 계층(DDL 없음)        | ❌       |
 | `seed.mjs`             | 초기 1회 데이터 적재                | ❌       |
+
+---
+
+## 8. 인프라 — Neon · 마이그레이션 · Actions
+
+### 8-1. DB는 Neon이다
+
+```
+프로젝트    Neon / aws-us-east-1 (N. Virginia)
+엔드포인트  ep-red-pine-av0rffus
+서버        PostgreSQL 18.4
+DB / 계정   neondb / neondb_owner
+```
+
+**왜 Neon인가.** 이 파이프라인은 매시간 몇 분 일하고 나머지는 논다(90%+ 유휴). Neon은 유휴가 5분 이어지면 컴퓨트를 정지시키고(scale-to-zero) 그동안 과금하지 않는다 — 워크로드 모양이 맞는다. 콜드 스타트는 실측 2.5초인데 배치 작업엔 무의미하다. 다만 **나중에 API/UI를 붙이면 첫 방문자가 그만큼 기다린다.**
+
+**왜 버지니아인가.** Neon에 도쿄·서울 리전이 없다(아시아는 싱가포르·시드니뿐). 최종 실행 위치가 GitHub Actions 러너(대부분 US)라 거기 붙는 게 맞다. `store.mjs`가 행 단위 INSERT를 루프로 돌려서 왕복 지연이 행 수만큼 곱해지는데, 러너 기준으로 버지니아가 압도적으로 가깝다.
+
+**연결 문자열이 두 개다.** 호스트에 `-pooler`가 붙었는지로 구분한다.
+
+| | 경로 | 쓰는 곳 |
+| --- | --- | --- |
+| **direct** (`-pooler` 없음) | Postgres에 바로 | **파이프라인**, `db:migrate` |
+| **pooled** (`-pooler` 있음) | PgBouncer 경유 | `app/api/**` (재작성 예정) |
+
+pooled는 접속을 돌려막아 동시 접속 상한이 높지만 **트랜잭션이 끝나면 세션 상태가 날아간다.** `store.mjs`의 `prepare: false`가 정확히 이걸 위한 설정이다. 파이프라인은 매시간 프로세스 하나뿐이라 direct로 충분하고, DDL은 세션이 유지되는 direct가 안전하다.
+
+로컬 `.env.local`에는 `DATABASE_URL`(direct)과 `DATABASE_URL_POOLED`가 있다. **후자는 현재 어떤 코드도 읽지 않는다** — API 재작성 때 쓰려고 적어둔 메모다.
+
+> ⚠️ **무료 플랜 스토리지가 0.5GB다.** `raw_signals`는 계속 쌓인다 — 버킷당 195행 · 행당 ~305 bytes → **연 170만 행 / 약 1GB**. 즉 **6개월쯤 뒤에 한도에 닿는다.** 넘으면 데이터가 지워지는 게 아니라 **INSERT/UPDATE/DELETE가 실패한다** — Actions는 초록불인데 데이터만 안 늘어나는, 알아채기 어려운 형태로 멈춘다. 원문은 재계산의 근거라 함부로 못 지운다(그게 이 설계의 핵심). 정리 정책이 필요하다. 컴퓨트(100 CU-hour/월)는 월 ~30으로 여유롭다.
+
+### 8-2. 스키마 마이그레이션
+
+**`db/schema.ts`가 유일한 소유자다.** 파이프라인은 drizzle을 런타임에 쓰지 않는다 — `pipeline/**`에 import가 0건이고 `store.mjs`는 `postgres` 패키지로 생 SQL을 쓴다. drizzle의 역할은 **테이블을 만드는 것**뿐이다.
+
+```
+db/schema.ts       ─ drizzle-kit ─▶  테이블 생성/변경   (스키마 바뀔 때마다)
+pipeline/store.mjs ─ 생 SQL ──────▶  데이터 적재        (매시간)
+app/api/** (예정)  ─ drizzle-orm ─▶  데이터 조회        (타입 안전 쿼리)
+```
+
+**바꾸는 절차:**
+
+```bash
+# 1) db/schema.ts 수정
+npm run db:generate   # 2) → drizzle/0001_xxx.sql 생성. DB 연결 불필요
+                      # 3) 생성된 .sql을 눈으로 확인 ★ 건너뛰지 말 것
+npm run db:migrate    # 4) → 안 돌린 것만 DB에 적용 + __drizzle_migrations에 기록
+                      # 5) 커밋 (db/schema.ts + drizzle/ 통째로)
+```
+
+**`drizzle/` 안의 세 가지가 각각 다르다:**
+
+| 파일 | DB에 감? | 역할 |
+| --- | --- | --- |
+| `0000_*.sql` | **감** | 실행할 명령 — "무엇을 할지" |
+| `meta/0000_snapshot.json` | 안 감 | 비교 기준 — "하고 나면 어떤 모습인지" |
+| `meta/_journal.json` | 안 감 | 순서 목차 |
+
+`generate`는 **실제 DB가 아니라 스냅샷 파일과** `schema.ts`를 대조해 diff를 뜬다. 그래서 DB 연결 없이 돌아가고, 그래서 **`drizzle/`은 `meta/`까지 통째로 커밋해야 한다** — 스냅샷이 없으면 이미 있는 테이블을 처음부터 다시 만드는 SQL을 뽑아낸다.
+
+적용 여부는 파일이 아니라 DB의 **`public.__drizzle_migrations`** 에만 있다. 파일 이름이 아니라 `.sql` **내용의 SHA256**을 저장한다(기본은 별도 `drizzle` 스키마인데, Neon 콘솔 Tables가 스키마를 하나씩만 보여줘서 `public`으로 옮겼다 — `drizzle.config.mjs`의 `migrations` 항목).
+
+**세 가지 주의:**
+
+- **`npm run db:push`는 쓰지 않는다.** 파일도 이력도 남기지 않고 DB를 즉시 바꾼다. 실 DB가 생긴 이상 되돌릴 근거가 없다.
+- **이미 적용된 `.sql`은 수정하지 않는다.** 해시가 어긋난다. 고칠 게 있으면 새 마이그레이션을 만든다.
+- **Neon 콘솔 SQL Editor로 `ALTER TABLE`을 치지 않는다.** 스냅샷과 현실이 어긋나 다음 `generate`가 엉뚱한 SQL을 뽑는다. 조회(`SELECT`)는 괜찮다.
+
+> **데이터 값을 옮기는 건 drizzle이 추론하지 못한다.** 구조 변경(컬럼 추가·삭제·인덱스)만 자동이다. 컬럼 이름을 바꾸면 종종 "옛 컬럼 DROP + 새 컬럼 ADD"로 뽑는데 그러면 데이터가 날아간다 — 생성된 `.sql`을 `ALTER TABLE ... RENAME COLUMN`으로 직접 고쳐 쓰면 된다. 그냥 SQL 파일이라 손대도 된다.
+
+### 8-3. GitHub Actions
+
+```
+.github/workflows/collect.yml   cron "5 * * * *"      매시간
+.github/workflows/rank.yml      cron "20 */2 * * *"   2시간마다
+```
+
+파일 안에 결정 근거를 주석으로 달아뒀다. 주기를 나눈 이유는 0장에 있다.
+
+**Secrets 3개** (레포 Settings → Secrets and variables → Actions → New repository secret):
+
+| Name | 값 |
+| --- | --- |
+| `DATABASE_URL` | Neon **direct** 문자열 |
+| `YOUTUBE_API_KEY` | |
+| `ANTHROPIC_API_KEY` | `rank.yml`에만 주입됨 |
+
+`REGION_CODE=KR`은 민감값이 아니라 워크플로에 직접 적었다. **`collect.yml`에는 `ANTHROPIC_API_KEY`를 일부러 주지 않는다** — 수집 경로에 LLM 호출이 섞여 들어오면 조용히 돌지 않고 바로 실패해서 드러난다.
+
+**함정 넷:**
+
+① **시간대는 안전하다.** `collect.mjs`의 `hourBucket()`이 `setMinutes(0,0,0)` 후 `toISOString()`인데, KST는 UTC+9 정시 오프셋이고 서머타임이 없어서 정시 내림 결과가 UTC에서든 KST에서든 같은 순간이다. 러너가 UTC라도 버킷은 안 틀어진다.
+
+② **cron은 밀린다.** 러너 혼잡 시 수십 분 지연이 흔하다. 1시간 버킷 기준이라 정각(`0 * * * *`)에 걸면 밀렸을 때 버킷이 비거나 겹친다. **`5 * * * *`** 로 두면 밀려도 같은 버킷에 떨어질 확률이 높다.
+
+③ **60일 무활동이면 GitHub이 스케줄을 자동으로 끈다.** 커밋이 뜸해지면 조용히 멈춘다.
+
+④ **스크래핑 차단 위험.** dcbest·theqoo·instiz는 HTML 스크래핑이라 러너 IP 대역이 막힐 수 있다. **이관 직후 소스별 수집 건수를 반드시 대조할 것** — 기준값(로컬 실측, 2026-08-16 13:00 UTC 버킷):
+
+```
+dcbest 49 · theqoo 20 · instiz 10 · youtube 110 · gtrends 10 = 199건
+```
+
+총합은 시간대에 따라 흔들리지만 **특정 소스만 0건**인 건 다르다. 막히면 그 소스만 별도 경로(자체 서버/프록시)가 필요하다.
+
+> **`schedule:`은 기본 브랜치(master)에서만 돈다.** `workflow_dispatch` 버튼도 파일이 기본 브랜치에 있어야 UI에 나타난다. 머지 전에는 Actions 탭에 아무것도 보이지 않는 게 정상이다.
+>
+> 머지에는 팀 조율이 걸려 있다 — **머지하면 master에서 `next build`가 깨진다.** `app/api/**`의 import 9곳이 구 스키마를 가리킨 채 끊겨 있어서다(의도한 상태이고 API 재작성 때 해소된다). 파이프라인 워크플로 자체는 `node`만 돌리므로 build와 무관하게 정상 동작한다. `lib/pipeline-v-he/**` 삭제도 songhaeunsong 브랜치가 살아 있어 공지가 필요하다.
+
+> **`npm ci`가 아니라 `npm ci --omit=dev`를 쓴다.** 파이프라인은 devDependencies(drizzle-kit·typescript·eslint)를 쓰지 않는다. `pipeline/**`의 외부 import는 `postgres`와 `@anthropic-ai/sdk` 둘뿐이고 모두 지연 import이며 dependencies에 있다.
+
+**YouTube 할당량은 여유롭다.** `youtube.mjs`가 비싼 `search.list`(100 units)를 쓰지 않고 `videos?chart=mostPopular`(1) + 영상당 `commentThreads`(1)만 쓴다 → 실행당 약 21 units, 매시간 돌려도 하루 ~500 units로 무료 한도 10,000의 5%다.
 
 ---
 

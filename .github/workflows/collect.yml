@@ -6,7 +6,7 @@
 #   수집을 거르면 그 시간대의 글은 이미 사라져서 나중에 복구할 방법이 없다.
 #   (반대로 rank는 원문만 있으면 언제든 다시 계산된다 → rank.yml은 2시간 주기)
 #
-# 문서: docs/current-work.md §4
+# 문서: pipeline/PIPELINE.md 8-3
 
 name: collect (hourly)
 
