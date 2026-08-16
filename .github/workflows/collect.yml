@@ -1,0 +1,68 @@
+# 매시간 5개 소스(dcbest·theqoo·instiz·youtube·gtrends)를 긁어 raw_signals에 쌓는다.
+# 로컬 launchd(com.trendrising.hourly)가 하던 일을 그대로 넘겨받는 자리다.
+#
+# ★ 이 워크플로는 Claude API를 쓰지 않는다. LLM 판정은 rank.yml에 있다.
+#   그래서 매시간 돌려도 Anthropic 비용이 0이고, 대신 버킷 해상도를 지킬 수 있다.
+#   수집을 거르면 그 시간대의 글은 이미 사라져서 나중에 복구할 방법이 없다.
+#   (반대로 rank는 원문만 있으면 언제든 다시 계산된다 → rank.yml은 2시간 주기)
+#
+# 문서: pipeline/PIPELINE.md 8-3
+
+name: collect (hourly)
+
+on:
+  schedule:
+    # 정각(0)이 아니라 :05인 이유 — GitHub cron은 러너가 혼잡하면 수십 분 밀린다.
+    # 이 파이프라인은 1시간 버킷이 기준이라, 정각에 걸어두면 조금만 밀려도
+    # 다음 버킷으로 넘어가 버려서 버킷이 비거나 겹친다. 5분 여유를 두면
+    # 밀려도 같은 버킷 안에 떨어질 확률이 높다.
+    #
+    # 시각은 UTC다. 다만 collect.mjs의 hourBucket()이 정시로 내림하고
+    # KST는 UTC+9 정시 오프셋에 서머타임이 없어서, 러너가 UTC로 돌아도
+    # 버킷 경계 자체는 어긋나지 않는다. (로그의 KST 표시 문자열만 다르다)
+    - cron: "5 * * * *"
+
+  # 수동 실행 버튼. 디버깅에 필수다 — 없으면 검증하려고 다음 정각까지 기다려야 한다.
+  # ※ 이 버튼은 워크플로 파일이 기본 브랜치(master)에 있어야 UI에 나타난다.
+  workflow_dispatch:
+
+# 앞 실행이 안 끝났는데 다음 스케줄이 뜨는 경우를 막는다.
+# cancel-in-progress: false — 돌고 있던 수집은 끝까지 두고 새 것을 대기시킨다.
+# (수집 도중에 끊으면 그 버킷이 반쪽만 남는다)
+concurrency:
+  group: pipeline-collect
+  cancel-in-progress: false
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    # 로컬 실측은 수십 초. 20분을 넘긴다면 어딘가 걸린 것이므로 끊는 게 맞다.
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22 # 로컬 개발 버전(v22.12.0)과 맞춤
+          cache: npm
+
+      # --omit=dev — 파이프라인은 devDependencies(drizzle-kit·typescript·eslint)를
+      # 전혀 쓰지 않는다. 필요한 건 postgres 하나뿐이고 dependencies에 있다.
+      # (pipeline/**의 외부 import는 postgres와 @anthropic-ai/sdk 둘뿐이며 모두 지연 import)
+      - run: npm ci --omit=dev
+
+      # npm run collect가 아니라 node를 직접 부르는 이유 —
+      # npm 스크립트에는 `--env-file=.env.local`이 붙어 있는데
+      # .env.local은 gitignore라 러너에 존재하지 않는다. 그대로 부르면 실패한다.
+      # 러너에서는 아래 env가 .env.local의 역할을 대신한다.
+      - run: node pipeline/collect.mjs
+        env:
+          # Neon의 direct 문자열(호스트에 -pooler가 없는 것)을 넣을 것.
+          # 매시간 프로세스 하나뿐이라 pooled가 필요 없다.
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
+          # 민감값이 아니라 secrets로 두지 않았다.
+          REGION_CODE: KR
+          # ★ ANTHROPIC_API_KEY를 일부러 주지 않는다.
+          #   collect 경로에 LLM 호출이 섞여 들어오면 조용히 돌지 않고 바로 실패해서 드러난다.

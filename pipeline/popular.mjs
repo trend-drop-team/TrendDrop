@@ -18,11 +18,11 @@
  *    다루는가"가 더 의미 있는 신호라 매체 단위로 묶었다.
  *  - boost의 기준점을 옮겼다. 자세한 건 각 boost 함수 주석 참고.
  *
- * 입력 행: { source, unit, text, videoId?, meta?, bucketAt }
+ * 입력 행: { site, kind, text, videoId?, meta?, bucketAt }
  */
 import { tokenize } from "./tokenize.mjs";
 
-/** source|unit → 가중치. 유튜브가 메인, 커뮤니티가 서브. */
+/** site|kind → 가중치. 유튜브가 메인, 커뮤니티가 서브. */
 export const WEIGHTS = {
   "gtrends|title": 20, // 이미 검증된 트렌드라 유튜브보다 살짝 위
   "youtube|title": 12,
@@ -41,7 +41,7 @@ const DEFAULTS = {
 
 /** 같은 영상의 댓글이 같은 단어를 반복해 점수를 부풀리는 걸 막는다. */
 function videoDedupKey(row, token) {
-  return row.source === "youtube" && row.videoId ? `${row.videoId}|${token}` : null;
+  return row.site === "youtube" && row.videoId ? `${row.videoId}|${token}` : null;
 }
 
 const clamp = (v, lo, hi) => Math.min(Math.max(v, lo), hi);
@@ -103,18 +103,18 @@ export function rankPopular(rows, options = {}) {
   // 댓글 meta엔 videoId·likeCount만 있어 조회수를 직접 알 수 없다.
   const boostByVideo = new Map();
   for (const row of rows) {
-    if (row.source === "youtube" && row.unit === "title" && row.videoId) {
+    if (row.site === "youtube" && row.kind === "title" && row.videoId) {
       boostByVideo.set(row.videoId, videoBoost(row.meta, row.bucketAt));
     }
   }
 
   const acc = new Map();
   const seenVideo = new Set();
-  const skipped = new Map(); // 가중치 미정의 source|unit 진단용
+  const skipped = new Map(); // 가중치 미정의 site|kind 진단용
   let boosted = 0; // 참여도 보정이 실제로 걸린 행 수(진단용)
 
   for (const row of rows) {
-    const key = `${row.source}|${row.unit}`;
+    const key = `${row.site}|${row.kind}`;
     const base = weights[key];
     if (base === undefined) {
       skipped.set(key, (skipped.get(key) ?? 0) + 1);
@@ -145,13 +145,17 @@ export function rankPopular(rows, options = {}) {
           sources: new Map(), // source → 가중합
           units: new Set(),
           sample: row.text,
+          boostSum: 0, // velocity(확산 속도) 산출용 — 참여도 보정값의 누적
+          boostCount: 0,
         };
         acc.set(token, entry);
       }
       entry.score += weight;
       entry.mentions += 1;
-      entry.sources.set(row.source, (entry.sources.get(row.source) ?? 0) + weight);
+      entry.sources.set(row.site, (entry.sources.get(row.site) ?? 0) + weight);
       entry.units.add(key);
+      entry.boostSum += boost;
+      entry.boostCount += 1;
     }
   }
 
@@ -178,6 +182,9 @@ export function rankPopular(rows, options = {}) {
       sources,
       units: [...entry.units],
       sample: entry.sample,
+      // 확산 속도(0~10) — 참여도 보정(videoBoost/trafficBoost/commentBoost)의 평균.
+      // 보정 없는 커뮤니티만 언급되면 1에 가깝고, 조회수·좋아요·검색량이 높을수록 커진다.
+      velocity: clamp(entry.boostSum / Math.max(entry.boostCount, 1), 0.5, 10),
     });
   }
 

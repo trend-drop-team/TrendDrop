@@ -1,8 +1,8 @@
 /**
- * 인기 랭킹 추출(+저장) — rising_raw_items의 최신 버킷을 읽어 "지금 인기" top-N을
+ * 인기 랭킹 추출(+저장) — raw_signals의 최신 버킷을 읽어 "지금 인기" top-N을
  * 계산한다. 매시간 job의 후반부.
  *
- * 실행:  node trend-rising/rank-popular.mjs [--save]
+ * 실행:  node pipeline/rank-popular.mjs [--save]
  *   env: DATABASE_URL(필수), HOURS(기본 6), TOP_N(기본 10), POOL(기본 50)
  *        창은 "직전 N시간"이다(버킷 개수가 아님). 1시간이면 표본이 ~300행뿐이라
  *        유튜브·커뮤니티 신호가 2~3 언급에 그쳐 순위가 뭉갠다. 6시간이 실용적인 최소치.
@@ -12,7 +12,7 @@
  * LLM 필터는 후보를 POOL개로 넓게 뽑은 뒤 걸러 topN을 채운다.
  * 판정에서 40% 안팎이 탈락·병합되므로 topN만 뽑으면 최종이 모자란다.
  */
-import { loadRecentItems, savePopularRun, closeDb } from "./store.mjs";
+import { loadRecentItems, startRun, saveTrendSnapshots, finishRun, closeDb } from "./store.mjs";
 import { rankPopular, WEIGHTS } from "./popular.mjs";
 import { applyVerdicts } from "./verdict.mjs";
 
@@ -24,7 +24,7 @@ const poolSize = Number(process.env.POOL ?? 50) || 50;
 
 const rows = await loadRecentItems(windowHours);
 if (rows.length === 0) {
-  console.error("rising_raw_items 가 비어 있음");
+  console.error("raw_signals 가 비어 있음");
   await closeDb();
   process.exit(1);
 }
@@ -42,12 +42,12 @@ const kst = (iso) =>
 // 창 안의 소스 구성
 const bySource = new Map();
 for (const r of rows) {
-  const k = `${r.source}|${r.unit}`;
+  const k = `${r.site}|${r.kind}`;
   bySource.set(k, (bySource.get(k) ?? 0) + 1);
 }
 
 console.log("\n" + "═".repeat(72));
-console.log("🔥 지금 인기 키워드 (trend-rising · popular)");
+console.log("🔥 지금 인기 키워드 (pipeline · popular)");
 console.log("═".repeat(72));
 const missed = windowHours - buckets;
 console.log(
@@ -99,10 +99,16 @@ ranked.forEach((k, i) => {
 console.log("");
 
 if (save) {
-  const runId = await savePopularRun(
-    { bucketAt, buckets, itemCount: rows.length, windowHours, filtered: stats.filtered },
-    ranked
-  );
+  // 랭킹 run은 수집 run과 별개다(pipeline='popular') — 이 파이프라인은
+  // 수집·랭킹이 분리돼 있어 이 run이 raw_signals가 아니라 trend_snapshots를 소유한다.
+  const runId = await startRun({ pipeline: "popular", geo: "KR", bucketAt, windowHours, buckets });
+  await saveTrendSnapshots(runId, bucketAt, ranked);
+  await finishRun(runId, {
+    status: "success",
+    rawSignalCount: rows.length,
+    keywordCount: ranked.length,
+    filtered: stats.filtered,
+  });
   console.log(`💾 popular run #${runId} 저장 — snapshots ${ranked.length}건\n`);
 }
 
