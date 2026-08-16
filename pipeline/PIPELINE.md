@@ -1,11 +1,11 @@
-# trend-rising 파이프라인
+# 데이터 수집 파이프라인 (pipeline/)
 
-커뮤니티·유튜브·구글트렌드에서 매시간 원문을 긁어와, **"지금 많이 언급되는 키워드" top10**을 만들어 Postgres에 쌓는다. 원래는 "평소 대비 갑자기 늘어난 단어"를 뽑는 급상승(rising) 방식이었으나 **인기(popular) 방식으로 전환**했다 — 폴더 이름(`trend-rising/`)은 그때의 잔재.
+커뮤니티·유튜브·구글트렌드에서 매시간 원문을 긁어와, **"지금 많이 언급되는 키워드" top10**을 만들어 Postgres에 쌓는다. 원래는 "평소 대비 갑자기 늘어난 단어"를 뽑는 급상승(rising) 방식이었으나 **인기(popular) 방식으로 전환**했다. 예전 폴더 이름 `trend-rising/`이 그때의 잔재였고, 이번에 `pipeline/`으로 정리했다 — `rank-popular.mjs`·`backfill-popular.mjs`처럼 파일 이름은 이미 현재 방식(popular)을 따르고 있었다.
 
-**스키마는 `db/unified-schema.ts`가 소유한다.** trend-rising은 테이블을 스스로 만들지 않고(`store.mjs`가 DDL을 안 함), 이미 존재하는 스키마에 데이터만 넣는다. 처음 셋업할 때 한 번:
+**스키마는 `db/schema.ts`가 소유한다.** 이 파이프라인은 테이블을 스스로 만들지 않고(`store.mjs`가 DDL을 안 함), 이미 존재하는 스키마에 데이터만 넣는다. 처음 셋업할 때 한 번:
 
 ```bash
-npm run db:push:unified   # = drizzle-kit push --config=drizzle.config.unified.mjs
+npm run db:push   # = drizzle-kit push --config=drizzle.config.mjs
 ```
 
 ---
@@ -16,7 +16,7 @@ npm run db:push:unified   # = drizzle-kit push --config=drizzle.config.unified.m
 매시 정각 (launchd → run-hourly.sh)
     │
     ├─▶ collect.mjs ─────────────────────────────────────────
-    │     collection_runs 1행 생성 (pipeline='trend-rising-collect')
+    │     collection_runs 1행 생성 (pipeline='collect')
     │     5개 소스 병렬 스크래핑
     │     raw_signals에 N행 INSERT (run_id = 방금 만든 run)
     │     collection_runs 그 행 UPDATE (status/raw_signal_count)
@@ -27,7 +27,7 @@ npm run db:push:unified   # = drizzle-kit push --config=drizzle.config.unified.m
           popular.mjs: 소스별 가중치 + 참여도 보정 → 후보 50개, term별 velocity 계산
           verdict.mjs: LLM 판정으로 노이즈 제거·복원·병합 (keyword_verdicts 캐시) → top10
           store.mjs:
-            collection_runs 1행 생성 (pipeline='trend-rising-popular')
+            collection_runs 1행 생성 (pipeline='popular')
             keywords UPSERT (신규 term만 승격)
             trend_snapshots에 top10 INSERT (run_id = 방금 만든 run, keyword_id로 연결)
             collection_runs 그 행 UPDATE (keyword_count)
@@ -39,8 +39,8 @@ npm run db:push:unified   # = drizzle-kit push --config=drizzle.config.unified.m
 
 | pipeline 값            | 만드는 곳                                 | 빈도         | 소유하는 것                      |
 | ---------------------- | ----------------------------------------- | ------------ | -------------------------------- |
-| `trend-rising-collect` | `collect.mjs`(+ 1회용 `seed.mjs`)         | 매시간 1건   | 그 실행에서 저장된 `raw_signals` |
-| `trend-rising-popular` | `rank-popular.mjs`/`backfill-popular.mjs` | 랭킹마다 1건 | 그 실행의 `trend_snapshots`      |
+| `collect` | `collect.mjs`(+ 1회용 `seed.mjs`)         | 매시간 1건   | 그 실행에서 저장된 `raw_signals` |
+| `popular` | `rank-popular.mjs`/`backfill-popular.mjs` | 랭킹마다 1건 | 그 실행의 `trend_snapshots`      |
 
 ---
 
@@ -61,7 +61,7 @@ npm run db:push:unified   # = drizzle-kit push --config=drizzle.config.unified.m
 ### 이 단계에서 DB에 쓰는 것
 
 ```
-collection_runs  1행  (pipeline='trend-rising-collect', geo='KR', bucket_at=이번 정시)
+collection_runs  1행  (pipeline='collect', geo='KR', bucket_at=이번 정시)
 raw_signals      N행  (run_id = 위 run, source_id/source/text/text_hash/video_id/meta/bucket_at/captured_at)
 sources          최초 1회만 5행 시드 (dcbest/theqoo/instiz/youtube/gtrends)
 ```
@@ -78,7 +78,7 @@ sources          최초 1회만 5행 시드 (dcbest/theqoo/instiz/youtube/gtrend
 실제 예:
 
 ```
-collection_runs  id=57  pipeline='trend-rising-collect'  bucket_at='21:00'  raw_signal_count=199
+collection_runs  id=57  pipeline='collect'  bucket_at='21:00'  raw_signal_count=199
 raw_signals      id=5650  run_id=57  source_id=5(gtrends)  source='title'  text='lg그룹'  bucket_at='21:00'
 ```
 
@@ -217,10 +217,10 @@ velocity: clamp(entry.boostSum / entry.boostCount, 0.5, 10);
 
 ## 5. 저장 — `store.mjs`
 
-`verdict.mjs`가 최종 top10(`ranked[]`)을 넘기면, `store.mjs`가 아래 순서로 커밋한다. **스키마는 `db/unified-schema.ts` 소유** — 이 파일은 `CREATE TABLE`을 하지 않고, 스키마가 없으면 `assertSchema()`가 즉시 멈춘다.
+`verdict.mjs`가 최종 top10(`ranked[]`)을 넘기면, `store.mjs`가 아래 순서로 커밋한다. **스키마는 `db/schema.ts` 소유** — 이 파일은 `CREATE TABLE`을 하지 않고, 스키마가 없으면 `assertSchema()`가 즉시 멈춘다.
 
 ```
-startRun({ pipeline: 'trend-rising-popular', ... })  → collection_runs 1행
+startRun({ pipeline: 'popular', ... })  → collection_runs 1행
 upsertKeyword(term)  각 term마다  → keywords UPSERT (이미 있으면 그대로 둠)
 saveTrendSnapshots() → trend_snapshots에 top10 INSERT
 finishRun()  → collection_runs UPDATE (keyword_count 등)
@@ -236,7 +236,7 @@ finishRun()  → collection_runs UPDATE (keyword_count 등)
 
 | 컬럼                                                           | 내용                                                       |
 | -------------------------------------------------------------- | ---------------------------------------------------------- |
-| `run_id`                                                       | → `collection_runs.id` (`pipeline='trend-rising-collect'`) |
+| `run_id`                                                       | → `collection_runs.id` (`pipeline='collect'`) |
 | `source_id`/`source`                                           | 어느 사이트 / 신호 종류(title·comment)                     |
 | `text`/`text_hash`/`video_id`/`meta`/`bucket_at`/`captured_at` | 1장 참고                                                   |
 
@@ -246,7 +246,7 @@ finishRun()  → collection_runs UPDATE (keyword_count 등)
 
 | 컬럼                                            | 내용                                                              |
 | ----------------------------------------------- | ----------------------------------------------------------------- |
-| `pipeline`                                      | `trend-rising-collect` / `trend-rising-popular`                   |
+| `pipeline`                                      | `collect` / `popular`                   |
 | `geo`                                           | 항상 `KR`                                                         |
 | `status`                                        | `success`/`partial`/`error`                                       |
 | `raw_signal_count`                              | collect: 저장한 원문 수 / popular: 창에서 읽은 원문 수            |
@@ -296,27 +296,27 @@ reasons=[{"source":"youtube","weight":43,"text":"NCT 127 엔시티 127 'Piñata'
 
 ```bash
 # 최초 1회 — 스키마 반영
-npm run db:push:unified
+npm run db:push
 
 # 매시간 자동 (launchd → run-hourly.sh)
 #   collect.mjs → rank-popular.mjs --save
 
 # 수동 확인 (DB에 안 씀)
-node trend-rising/rank-popular.mjs
-node trend-rising/rank-popular.mjs --no-llm   # LLM 없이 순수 점수 순위만
+node pipeline/rank-popular.mjs
+node pipeline/rank-popular.mjs --no-llm   # LLM 없이 순수 점수 순위만
 
 # 파라미터 실험 (TOP_N 기본 10, POOL 기본 50, HOURS 기본 6)
-HOURS=24 TOP_N=30 POOL=100 node trend-rising/rank-popular.mjs
+HOURS=24 TOP_N=30 POOL=100 node pipeline/rank-popular.mjs
 
 # 판정 캐시 워밍 — 전 기간 term 일괄 판정
-node trend-rising/warm-verdicts.mjs --dry
-node trend-rising/warm-verdicts.mjs
+node pipeline/warm-verdicts.mjs --dry
+node pipeline/warm-verdicts.mjs
 
 # 전 기간 재생성 — keyword_verdicts 캐시만 읽고 LLM은 호출 안 함
-node trend-rising/backfill-popular.mjs --reset
+node pipeline/backfill-popular.mjs --reset
 ```
 
-`backfill-popular.mjs --reset`은 `trend-rising-popular` run과 그 `trend_snapshots`만 지우고 다시 채운다(`trend-rising-collect` run·`raw_signals`는 안 건드림). 가중치나 카테고리 계수를 고치고 이걸 돌리면 전체 시계열이 새 기준으로 재생성된다 — **API 호출 0회.**
+`backfill-popular.mjs --reset`은 `popular` run과 그 `trend_snapshots`만 지우고 다시 채운다(`collect` run·`raw_signals`는 안 건드림). 가중치나 카테고리 계수를 고치고 이걸 돌리면 전체 시계열이 새 기준으로 재생성된다 — **API 호출 0회.**
 
 ### 스케줄
 
@@ -338,13 +338,12 @@ node trend-rising/backfill-popular.mjs --reset
 | `backfill-popular.mjs` | 전 기간 재생성(캐시만 읽음)         | ❌       |
 | `store.mjs`            | Postgres 저장 계층(DDL 없음)        | ❌       |
 | `seed.mjs`             | 초기 1회 데이터 적재                | ❌       |
-| `migrations/*.mjs`     | 1회 스키마/데이터 마이그레이션 기록 | 일부     |
 
 ---
 
 ## TODO
 
-**카테고리(`keywords.category_id`)** — 계속 NULL. `keyword_verdicts.content_type`(인물/사건·사고/스포츠 등, 이미 판정·캐싱됨)을 그대로 `categories`/`category_id`로 옮기면 추가 LLM 비용 없이 채울 수 있음. 단 지금 `categories`(푸드/뷰티/테크)는 trend-rising 콘텐츠와 축이 안 맞아서(예전에 억지로 매핑했다가 87%가 "기타") **`categories` 마스터 목록 자체를 trend-rising 도메인에 맞게 바꿀지부터 팀(송하은/UI 담당)과 확인 필요**. master/v-he가 폐기되면 다른 파이프라인이 필요로 하는 카테고리가 없어지므로 바꾸기 더 쉬워짐.
+**카테고리(`keywords.category_id`)** — 계속 NULL. `keyword_verdicts.content_type`(인물/사건·사고/스포츠 등, 이미 판정·캐싱됨)을 그대로 `categories`/`category_id`로 옮기면 추가 LLM 비용 없이 채울 수 있음. 단 지금 `categories`(푸드/뷰티/테크)는 이 파이프라인 콘텐츠와 축이 안 맞아서(예전에 억지로 매핑했다가 87%가 "기타") **`categories` 마스터 목록 자체를 이 파이프라인 도메인에 맞게 바꿀지부터 팀(송하은/UI 담당)과 확인 필요**. master/v-he가 폐기되면 다른 파이프라인이 필요로 하는 카테고리가 없어지므로 바꾸기 더 쉬워짐.
 
 **`trend_contents`(상세페이지 "근거 콘텐츠" 카드)** — 지금 아예 안 씀. 필요한 필드: `url`/`thumbnail_url`/`metric_label`/`excerpt`.
 

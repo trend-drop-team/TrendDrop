@@ -34,22 +34,14 @@ const MARKUP_ONLY = new Set([
   "api-trend-panel",
 ]);
 // 팀 소유(우리가 건드리면 안 되는) 경로. 변경되면 경고.
+// 구 수집 파이프라인(lib/*-collector.ts, trend-pipeline, trends-service, pipeline-v-he 등)은
+// 통합 스키마 컷오버 때 제거됨 — 백엔드는 db/schema.ts 기준으로 재작성 예정.
 const PROTECTED = [
   "app/api-lab",
   "app/api",
   "components",
   "app/collection-log",
   "app/collection-log-v-he",
-  "lib/db-setup.ts",
-  "lib/google-news-collector.ts",
-  "lib/google-news-rss.ts",
-  "lib/google-trends.ts",
-  "lib/trend-pipeline.ts",
-  "lib/youtube-api.ts",
-  "lib/youtube-collector.ts",
-  "lib/youtube-seed-queries.ts",
-  "lib/trends-service.ts",
-  "lib/bootstrap-trends.ts",
   "db",
 ];
 // 렌더 순수성 스캔에서 제외할 경로(서버 전용/팀 파일 등은 new Date 등이 정당).

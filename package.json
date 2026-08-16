@@ -8,11 +8,8 @@
     "lint": "eslint .",
     "db:generate": "drizzle-kit generate --config=drizzle.config.mjs",
     "db:push": "drizzle-kit push --config=drizzle.config.mjs",
-    "db:push:unified": "drizzle-kit push --config=drizzle.config.unified.mjs",
-    "db:setup": "node scripts/db-setup.mjs",
-    "db:seed": "node scripts/db-seed.mjs",
-    "db:check": "node scripts/db-check.mjs",
-    "report:v-he": "node --env-file=.env.local scripts/collection-report-v-he.mjs",
+    "collect": "node --env-file=.env.local pipeline/collect.mjs",
+    "rank": "node --env-file=.env.local pipeline/rank-popular.mjs --save",
     "verify:ui": "node scripts/verify-ui.mjs"
   },
   "dependencies": {

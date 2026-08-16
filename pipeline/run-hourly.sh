@@ -6,10 +6,10 @@ set -uo pipefail
 PROJECT_DIR="/Users/yang/TrendDrop"
 NODE="/Users/yang/.nvm/versions/node/v22.12.0/bin/node"
 PG_BIN="/opt/homebrew/opt/postgresql@14/bin"
-LOG="$PROJECT_DIR/trend-rising/.data/hourly.log"
+LOG="$PROJECT_DIR/pipeline/.data/hourly.log"
 
 cd "$PROJECT_DIR"
-mkdir -p "$PROJECT_DIR/trend-rising/.data"
+mkdir -p "$PROJECT_DIR/pipeline/.data"
 
 # .env.local(DATABASE_URL, YOUTUBE_API_KEY 등) 로드
 set -a; . "$PROJECT_DIR/.env.local"; set +a
@@ -19,6 +19,6 @@ set -a; . "$PROJECT_DIR/.env.local"; set +a
   -l /opt/homebrew/var/log/postgresql@14.log start
 
 echo "==== $(date '+%Y-%m-%d %H:%M:%S') 시작 ====" >> "$LOG"
-"$NODE" trend-rising/collect.mjs             >> "$LOG" 2>&1
-"$NODE" trend-rising/rank-popular.mjs --save >> "$LOG" 2>&1
+"$NODE" pipeline/collect.mjs             >> "$LOG" 2>&1
+"$NODE" pipeline/rank-popular.mjs --save >> "$LOG" 2>&1
 echo "" >> "$LOG"

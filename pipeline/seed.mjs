@@ -3,9 +3,9 @@
  * 이후엔 collect.mjs가 매시간 append하므로 이 스크립트는 최초 1번만.
  *
  * raw_signals.run_id가 NOT NULL이라, 스냅샷을 bucket_at별로 묶어 버킷마다
- * collect run(pipeline='trend-rising-collect') 1건을 합성한다 — 004 마이그레이션과 같은 방식.
+ * collect run(pipeline='collect') 1건을 합성한다 — 004 마이그레이션과 같은 방식.
  *
- * 실행: node trend-rising/seed.mjs [스냅샷경로]
+ * 실행: node pipeline/seed.mjs [스냅샷경로]
  */
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -49,7 +49,7 @@ console.log(`seed 대상 ${rows.length}행 (버킷 ${byBucket.size}개) → raw_
 let total = 0;
 let done = 0;
 for (const [bucketAt, bucketRows] of byBucket) {
-  const runId = await startRun({ pipeline: "trend-rising-collect", geo: "KR", bucketAt });
+  const runId = await startRun({ pipeline: "collect", geo: "KR", bucketAt });
   try {
     let saved = 0;
     for (let j = 0; j < bucketRows.length; j += 1000) {

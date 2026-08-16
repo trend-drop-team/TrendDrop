@@ -2,7 +2,7 @@
  * 수집 오케스트레이션 — 5소스를 병렬 스크래핑해 1시간 버킷으로 raw_signals에 축적.
  * trend-collector src/jobs/collect-sources.ts 에서 이전(SQLite→Postgres).
  *
- * 실행:  node trend-rising/collect.mjs
+ * 실행:  node pipeline/collect.mjs
  *   env: YOUTUBE_API_KEY, REGION_CODE (유튜브용), DATABASE_URL (저장용)
  *   DATABASE_URL 없으면 스크랩만 하고 저장은 스킵(스크래퍼 검증용).
  */
@@ -82,9 +82,9 @@ async function main() {
     return;
   }
 
-  // 이 실행 자체를 collection_runs에 남긴다(pipeline='trend-rising-collect').
-  // raw_signals.run_id가 이 값을 가리킨다 — 랭킹 run(trend-rising-popular)과는 별개.
-  const runId = await startRun({ pipeline: "trend-rising-collect", geo: "KR", bucketAt: bucket });
+  // 이 실행 자체를 collection_runs에 남긴다(pipeline='collect').
+  // raw_signals.run_id가 이 값을 가리킨다 — 랭킹 run(popular)과는 별개.
+  const runId = await startRun({ pipeline: "collect", geo: "KR", bucketAt: bucket });
   const apiCallLog = results.map((r) => ({ source: r.name, items: r.items.length, error: r.error ?? null }));
   const errored = results.filter((r) => r.error);
   const status = errored.length === 0 ? "success" : errored.length === results.length ? "error" : "partial";

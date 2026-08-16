@@ -2,7 +2,7 @@
  * 인기 랭킹 추출(+저장) — raw_signals의 최신 버킷을 읽어 "지금 인기" top-N을
  * 계산한다. 매시간 job의 후반부.
  *
- * 실행:  node trend-rising/rank-popular.mjs [--save]
+ * 실행:  node pipeline/rank-popular.mjs [--save]
  *   env: DATABASE_URL(필수), HOURS(기본 6), TOP_N(기본 10), POOL(기본 50)
  *        창은 "직전 N시간"이다(버킷 개수가 아님). 1시간이면 표본이 ~300행뿐이라
  *        유튜브·커뮤니티 신호가 2~3 언급에 그쳐 순위가 뭉갠다. 6시간이 실용적인 최소치.
@@ -47,7 +47,7 @@ for (const r of rows) {
 }
 
 console.log("\n" + "═".repeat(72));
-console.log("🔥 지금 인기 키워드 (trend-rising · popular)");
+console.log("🔥 지금 인기 키워드 (pipeline · popular)");
 console.log("═".repeat(72));
 const missed = windowHours - buckets;
 console.log(
@@ -99,9 +99,9 @@ ranked.forEach((k, i) => {
 console.log("");
 
 if (save) {
-  // 랭킹 run은 수집 run과 별개다(pipeline='trend-rising-popular') — trend-rising은
+  // 랭킹 run은 수집 run과 별개다(pipeline='popular') — 이 파이프라인은
   // 수집·랭킹이 분리돼 있어 이 run이 raw_signals가 아니라 trend_snapshots를 소유한다.
-  const runId = await startRun({ pipeline: "trend-rising-popular", geo: "KR", bucketAt, windowHours, buckets });
+  const runId = await startRun({ pipeline: "popular", geo: "KR", bucketAt, windowHours, buckets });
   await saveTrendSnapshots(runId, bucketAt, ranked);
   await finishRun(runId, {
     status: "success",

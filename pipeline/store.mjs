@@ -1,19 +1,19 @@
 /**
  * Postgres 저장 계층 — 모든 데이터가 TrendDrop Postgres 한 곳에 들어간다.
  *
- * 스키마 소유권은 db/unified-schema.ts에 있다. 이 파일은 테이블을 만들지 않는다 —
+ * 스키마 소유권은 db/schema.ts에 있다. 이 파일은 테이블을 만들지 않는다 —
  * 스키마가 없으면 assertSchema()가 안내 메시지와 함께 즉시 중단시킨다.
- * (스키마 반영: `npm run db:push:unified` 또는 `npx drizzle-kit push --config=drizzle.config.unified.mjs`)
+ * (스키마 반영: `npm run db:push` 또는 `npx drizzle-kit push --config=drizzle.config.mjs`)
  *
- * trend-rising이 쓰는 테이블 6개:
+ * 이 파이프라인이 쓰는 테이블 6개:
  *   sources             수집 소스 마스터 (dcbest/theqoo/instiz/youtube/gtrends 5행 고정) — 데이터만 시드
  *   raw_signals         수집 원문 (1시간 버킷). run_id로 어느 collect 실행에서 왔는지 귀속
- *   collection_runs     파이프라인 실행 로그. trend-rising은 두 종류를 남긴다:
- *                          pipeline='trend-rising-collect'  매시간 1건 — raw_signals 소유
- *                          pipeline='trend-rising-popular'  랭킹마다 1건 — trend_snapshots 소유
+ *   collection_runs     파이프라인 실행 로그. 이 파이프라인은 두 종류를 남긴다:
+ *                          pipeline='collect'  매시간 1건 — raw_signals 소유
+ *                          pipeline='popular'  랭킹마다 1건 — trend_snapshots 소유
  *                        (수집과 랭킹이 분리돼 있어 run 자체가 별개다. 11장 PIPELINE.md 참고)
  *   keywords             키워드 엔티티. category_id(FK→categories)는 당분간 채우지 않는다 —
- *                        UI 카테고리(푸드/뷰티/테크)와 trend-rising의 content_type(인물/사건사고 등)은
+ *                        UI 카테고리(푸드/뷰티/테크)와 이 파이프라인의 content_type(인물/사건사고 등)은
  *                        축이 달라 매핑 규칙이 없다.
  *   trend_snapshots      랭킹 실행의 top-N. keyword_id FK, reasons(jsonb)에 소스별 근거 보관
  *   keyword_verdicts     LLM 판정 캐시
@@ -54,7 +54,7 @@ async function assertSchema() {
   if (!row?.reg) {
     throw new Error(
       "unified 스키마가 DB에 없습니다. 먼저 반영하세요: " +
-        "npm run db:push:unified (= npx drizzle-kit push --config=drizzle.config.unified.mjs)"
+        "npm run db:push (= npx drizzle-kit push --config=drizzle.config.mjs)"
     );
   }
   schemaChecked = true;
@@ -72,7 +72,7 @@ const SOURCE_SEED = [
 /**
  * sources 5행 시드(멱등). 테이블은 이미 있다고 가정(assertSchema)하고 데이터만 넣는다.
  *
- * unified-schema.ts의 sources는 name에만 UNIQUE가 있고 kind엔 없다(설계 허점 —
+ * db/schema.ts의 sources는 name에만 UNIQUE가 있고 kind엔 없다(설계 허점 —
  * 백엔드에 공유 필요). 그래서 ON CONFLICT는 kind가 아니라 name 기준으로 건다.
  */
 export async function seedSources() {
@@ -99,8 +99,8 @@ async function sourceIdMap() {
  * 파이프라인 실행 1건 시작. collection_runs는 master/v-he 등 다른 파이프라인과
  * 공유하는 테이블이라 pipeline 컬럼으로 반드시 구분해야 한다.
  *
- * trend-rising은 이 함수를 두 자리에서 부른다 — collect.mjs(pipeline: "trend-rising-collect",
- * 매시간 1건)와 rank-popular.mjs/backfill-popular.mjs(pipeline: "trend-rising-popular",
+ * 이 파이프라인은 이 함수를 두 자리에서 부른다 — collect.mjs(pipeline: "collect",
+ * 매시간 1건)와 rank-popular.mjs/backfill-popular.mjs(pipeline: "popular",
  * 랭킹마다 1건). 반환된 runId를 뒤이어 insertRawItems/saveTrendSnapshots에 넘긴다.
  */
 export async function startRun({ pipeline, geo = "KR", bucketAt, windowHours, buckets } = {}) {
@@ -135,7 +135,7 @@ export async function finishRun(
 /**
  * 수집 원문 저장. 반환: 새로 저장된 수(중복 제외).
  * row: {site, kind, text, textHash, meta, bucketAt, capturedAt}
- * runId: startRun({ pipeline: "trend-rising-collect" })로 얻은 이번 수집 실행의 run.
+ * runId: startRun({ pipeline: "collect" })로 얻은 이번 수집 실행의 run.
  */
 export async function insertRawItems(rows, runId) {
   if (rows.length === 0) return 0;
@@ -305,7 +305,7 @@ export async function upsertKeyword(term, { sourceId } = {}) {
 /**
  * 인기 랭킹 top-N을 trend_snapshots에 저장. ranked[i] = popular.mjs의 항목(이미
  * verdict.mjs가 keep=true만 남긴 결과). run은 호출 측이 startRun({ pipeline:
- * "trend-rising-popular" })으로 미리 만들어 runId를 넘긴다.
+ * "popular" })으로 미리 만들어 runId를 넘긴다.
  *
  * 이 함수가 하지 않는 것 — previousRank는 저장하지 않는다. unified 스키마는
  * trend_snapshots에 그 컬럼이 없다(API가 read 시점에 직전 run과 조인해 계산하는
@@ -328,10 +328,10 @@ export async function saveTrendSnapshots(runId, bucketAt, ranked) {
     );
   }
 
-  // growth_rate 계산용 — 직전 popular run(이번 run 이전, pipeline='trend-rising-popular')의
+  // growth_rate 계산용 — 직전 popular run(이번 run 이전, pipeline='popular')의
   // keyword_id별 score. LLM 없이 순수 비교로 낸다.
   const [prevRun] = await s`SELECT id FROM collection_runs
-    WHERE pipeline = 'trend-rising-popular' AND id < ${runId}
+    WHERE pipeline = 'popular' AND id < ${runId}
     ORDER BY id DESC LIMIT 1`;
   const prevScores = prevRun
     ? new Map(
