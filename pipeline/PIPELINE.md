@@ -43,10 +43,10 @@ rank.yml — 2시간마다 :20  (cron "20 */2 * * *")
 
 그래서 **`collection_runs`에 이 파이프라인이 남기는 run은 두 종류**다 — `pipeline` 컬럼으로 구분되고, 서로 다른 하위 테이블을 소유한다:
 
-| pipeline 값            | 만드는 곳                                 | 빈도         | 소유하는 것                      |
-| ---------------------- | ----------------------------------------- | ------------ | -------------------------------- |
-| `collect` | `collect.mjs`(+ 1회용 `seed.mjs`)         | 매시간 1건   | 그 실행에서 저장된 `raw_signals` |
-| `popular` | `rank-popular.mjs`/`backfill-popular.mjs` | 랭킹마다 1건 | 그 실행의 `trend_snapshots`      |
+| pipeline 값 | 만드는 곳                                 | 빈도         | 소유하는 것                      |
+| ----------- | ----------------------------------------- | ------------ | -------------------------------- |
+| `collect`   | `collect.mjs`                             | 매시간 1건   | 그 실행에서 저장된 `raw_signals` |
+| `popular`   | `rank-popular.mjs`/`backfill-popular.mjs` | 랭킹마다 1건 | 그 실행의 `trend_snapshots`      |
 
 ---
 
@@ -202,10 +202,10 @@ velocity: clamp(entry.boostSum / entry.boostCount, 0.5, 10);
 
 **겹치는 비율은 실행 주기에 따라 달라진다.** 창 6시간 기준으로:
 
-| 실행 주기 | 창 겹침 | 월 실행 | 판정 시도(50개 기준) |
-| --------- | ------- | ------- | -------------------- |
-| 1시간 (예전 launchd) | 5/6 ≈ 83% | 730회 | 36,500회 |
-| **2시간 (현재 rank.yml)** | **4/6 ≈ 67%** | **360회** | **18,000회** |
+| 실행 주기                 | 창 겹침       | 월 실행   | 판정 시도(50개 기준) |
+| ------------------------- | ------------- | --------- | -------------------- |
+| 1시간 (예전 launchd)      | 5/6 ≈ 83%     | 730회     | 36,500회             |
+| **2시간 (현재 rank.yml)** | **4/6 ≈ 67%** | **360회** | **18,000회**         |
 
 주기를 늘리면 실행 횟수는 절반이 되지만 겹침이 줄어 **실행당 신규 판정은 늘어난다.** 그래서 실제 LLM 비용은 정확히 절반이 아니라 그보다 조금 덜 준다.
 
@@ -246,11 +246,11 @@ finishRun()  → collection_runs UPDATE (keyword_count 등)
 
 ### `raw_signals` — 수집 원문
 
-| 컬럼                                                           | 내용                                                       |
-| -------------------------------------------------------------- | ---------------------------------------------------------- |
+| 컬럼                                                           | 내용                                          |
+| -------------------------------------------------------------- | --------------------------------------------- |
 | `run_id`                                                       | → `collection_runs.id` (`pipeline='collect'`) |
-| `source_id`/`source`                                           | 어느 사이트 / 신호 종류(title·comment)                     |
-| `text`/`text_hash`/`video_id`/`meta`/`bucket_at`/`captured_at` | 1장 참고                                                   |
+| `source_id`/`source`                                           | 어느 사이트 / 신호 종류(title·comment)        |
+| `text`/`text_hash`/`video_id`/`meta`/`bucket_at`/`captured_at` | 1장 참고                                      |
 
 `UNIQUE(source_id, text_hash, bucket_at)`.
 
@@ -258,7 +258,7 @@ finishRun()  → collection_runs UPDATE (keyword_count 등)
 
 | 컬럼                                            | 내용                                                              |
 | ----------------------------------------------- | ----------------------------------------------------------------- |
-| `pipeline`                                      | `collect` / `popular`                   |
+| `pipeline`                                      | `collect` / `popular`                                             |
 | `geo`                                           | 항상 `KR`                                                         |
 | `status`                                        | `success`/`partial`/`error`                                       |
 | `raw_signal_count`                              | collect: 저장한 원문 수 / popular: 창에서 읽은 원문 수            |
@@ -333,26 +333,25 @@ node pipeline/backfill-popular.mjs --reset
 
 ### 스케줄 — launchd(구) → GitHub Actions(현재)
 
-**예전:** `~/Library/LaunchAgents/com.trendrising.hourly.plist`가 매시 정각에 `run-hourly.sh`를 실행했다. 맥이 꺼지거나 잠들면 그 시간이 통째로 비었고 소급도 안 됐다. **현재 이 작업은 `disabled` 상태이고 마지막 실행 로그는 2026-08-04다.**
+**예전:** `~/Library/LaunchAgents/com.trendrising.hourly.plist`가 매시 정각에 `run-hourly.sh`를 실행했다. 맥이 꺼지거나 잠들면 그 시간이 통째로 비었고 소급도 안 됐다. 마지막 실행 로그는 2026-08-04다.
 
-`run-hourly.sh`는 절대 경로(`/Users/yang/...`)·nvm 경로·로컬 pg 기동 로직이 박혀 있어 러너에서 못 쓴다. **Actions에서는 아예 호출하지 않는다** — 실제로 필요한 건 `node pipeline/collect.mjs` 한 줄뿐이었다.
+`run-hourly.sh`는 절대 경로(`/Users/yang/...`)·nvm 경로·로컬 pg 기동 로직이 박혀 있어 러너에서 못 썼다. 실제로 필요한 건 `node pipeline/collect.mjs` 한 줄뿐이었으므로 **2026-08-16에 스크립트를 삭제했다.** launchd 작업도 언로드된 상태다(`launchctl list`에 없음). 남아 있는 plist 파일(`com.trendrising.hourly.plist`, `com.trendcollector.sources.plist`)은 레포 밖이라 손대지 않았다 — 지우려면 직접 지워야 한다.
 
 ---
 
 ## 7. 파일 목록
 
-| 파일                   | 역할                                | API 호출 |
-| ---------------------- | ----------------------------------- | -------- |
-| `collect.mjs`          | 5소스 병렬 수집 → `raw_signals`     | YouTube  |
-| `sources/*.mjs`        | 소스별 스크래퍼                     |          |
-| `tokenize.mjs`         | 문장 → 단어                         | ❌       |
-| `popular.mjs`          | 랭킹 로직(가중치·보정·velocity)     | ❌       |
-| `verdict.mjs`          | LLM 판정                            | ✅       |
-| `rank-popular.mjs`     | 최신 창 계산·판정·저장              | 간접     |
-| `warm-verdicts.mjs`    | 전 기간 term 일괄 판정              | ✅       |
-| `backfill-popular.mjs` | 전 기간 재생성(캐시만 읽음)         | ❌       |
-| `store.mjs`            | Postgres 저장 계층(DDL 없음)        | ❌       |
-| `seed.mjs`             | 초기 1회 데이터 적재                | ❌       |
+| 파일                   | 역할                            | API 호출 |
+| ---------------------- | ------------------------------- | -------- |
+| `collect.mjs`          | 5소스 병렬 수집 → `raw_signals` | YouTube  |
+| `sources/*.mjs`        | 소스별 스크래퍼                 |          |
+| `tokenize.mjs`         | 문장 → 단어                     | ❌       |
+| `popular.mjs`          | 랭킹 로직(가중치·보정·velocity) | ❌       |
+| `verdict.mjs`          | LLM 판정                        | ✅       |
+| `rank-popular.mjs`     | 최신 창 계산·판정·저장          | 간접     |
+| `warm-verdicts.mjs`    | 전 기간 term 일괄 판정          | ✅       |
+| `backfill-popular.mjs` | 전 기간 재생성(캐시만 읽음)     | ❌       |
+| `store.mjs`            | Postgres 저장 계층(DDL 없음)    | ❌       |
 
 ---
 
@@ -373,10 +372,10 @@ DB / 계정   neondb / neondb_owner
 
 **연결 문자열이 두 개다.** 호스트에 `-pooler`가 붙었는지로 구분한다.
 
-| | 경로 | 쓰는 곳 |
-| --- | --- | --- |
+|                             | 경로            | 쓰는 곳                      |
+| --------------------------- | --------------- | ---------------------------- |
 | **direct** (`-pooler` 없음) | Postgres에 바로 | **파이프라인**, `db:migrate` |
-| **pooled** (`-pooler` 있음) | PgBouncer 경유 | `app/api/**` (재작성 예정) |
+| **pooled** (`-pooler` 있음) | PgBouncer 경유  | `app/api/**` (재작성 예정)   |
 
 pooled는 접속을 돌려막아 동시 접속 상한이 높지만 **트랜잭션이 끝나면 세션 상태가 날아간다.** `store.mjs`의 `prepare: false`가 정확히 이걸 위한 설정이다. 파이프라인은 매시간 프로세스 하나뿐이라 direct로 충분하고, DDL은 세션이 유지되는 direct가 안전하다.
 
@@ -406,11 +405,11 @@ npm run db:migrate    # 4) → 안 돌린 것만 DB에 적용 + __drizzle_migrat
 
 **`drizzle/` 안의 세 가지가 각각 다르다:**
 
-| 파일 | DB에 감? | 역할 |
-| --- | --- | --- |
-| `0000_*.sql` | **감** | 실행할 명령 — "무엇을 할지" |
-| `meta/0000_snapshot.json` | 안 감 | 비교 기준 — "하고 나면 어떤 모습인지" |
-| `meta/_journal.json` | 안 감 | 순서 목차 |
+| 파일                      | DB에 감? | 역할                                  |
+| ------------------------- | -------- | ------------------------------------- |
+| `0000_*.sql`              | **감**   | 실행할 명령 — "무엇을 할지"           |
+| `meta/0000_snapshot.json` | 안 감    | 비교 기준 — "하고 나면 어떤 모습인지" |
+| `meta/_journal.json`      | 안 감    | 순서 목차                             |
 
 `generate`는 **실제 DB가 아니라 스냅샷 파일과** `schema.ts`를 대조해 diff를 뜬다. 그래서 DB 연결 없이 돌아가고, 그래서 **`drizzle/`은 `meta/`까지 통째로 커밋해야 한다** — 스냅샷이 없으면 이미 있는 테이블을 처음부터 다시 만드는 SQL을 뽑아낸다.
 
@@ -435,11 +434,11 @@ npm run db:migrate    # 4) → 안 돌린 것만 DB에 적용 + __drizzle_migrat
 
 **Secrets 3개** (레포 Settings → Secrets and variables → Actions → New repository secret):
 
-| Name | 값 |
-| --- | --- |
-| `DATABASE_URL` | Neon **direct** 문자열 |
-| `YOUTUBE_API_KEY` | |
-| `ANTHROPIC_API_KEY` | `rank.yml`에만 주입됨 |
+| Name                | 값                     |
+| ------------------- | ---------------------- |
+| `DATABASE_URL`      | Neon **direct** 문자열 |
+| `YOUTUBE_API_KEY`   |                        |
+| `ANTHROPIC_API_KEY` | `rank.yml`에만 주입됨  |
 
 `REGION_CODE=KR`은 민감값이 아니라 워크플로에 직접 적었다. **`collect.yml`에는 `ANTHROPIC_API_KEY`를 일부러 주지 않는다** — 수집 경로에 LLM 호출이 섞여 들어오면 조용히 돌지 않고 바로 실패해서 드러난다.
 
