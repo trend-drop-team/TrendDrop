@@ -1,6 +1,7 @@
 import Onboarding from "@/app/onboarding";
 import RankingBoard from "@/app/ranking-board";
-import { getCategories, getTimeline, getTrends } from "@/lib/api/service";
+import { getCategories } from "@/server/services/category.service";
+import { getTimeline, getTrends } from "@/server/services/trend.service";
 import CollectionControls from "@/components/collection-controls";
 
 /** 랭킹 밖에서 올라오고 있는 "예비" 키워드로 볼 상위 컷. */

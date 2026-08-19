@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
-import { handleRouteError } from "@/lib/api/http";
-import { getCategories } from "@/lib/api/service";
+import { handleRouteError } from "@/server/http/errors";
+import { getCategories } from "@/server/services/category.service";
 
 /** 3.1 GET /api/categories — 홈 카테고리 탭, /explore 히트맵 행 순서. */
 export async function GET() {

@@ -1,5 +1,6 @@
 import ExploreView from "@/app/explore-view";
-import { getHeatmap, getTimeline } from "@/lib/api/service";
+import { getHeatmap } from "@/server/services/heatmap.service";
+import { getTimeline } from "@/server/services/trend.service";
 
 /** 히트맵 가로축·A/B 비교 차트가 함께 보는 구간. */
 const WINDOW_HOURS = 12;

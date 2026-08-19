@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 
-import { parseLimit, parseRunId } from "@/lib/api/common";
-import { handleRouteError } from "@/lib/api/http";
-import { getTrends, parsePeriod } from "@/lib/api/service";
+import { parseLimit, parsePeriod, parseRunId } from "@/server/http/query";
+import { handleRouteError } from "@/server/http/errors";
+import { getTrends } from "@/server/services/trend.service";
 
 /**
  * 3.2 GET /api/trends?period=realtime|daily&category=&limit=30&runId=

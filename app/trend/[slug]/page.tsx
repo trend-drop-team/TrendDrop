@@ -1,9 +1,9 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-import { NotFoundError } from "@/lib/api/common";
-import { getKeywordDetail } from "@/lib/api/service";
-import type { KeywordDetail } from "@/lib/api/types";
+import { NotFoundError } from "@/server/http/errors";
+import { getKeywordDetail } from "@/server/services/keyword.service";
+import type { KeywordDetail } from "@/types/api/keyword";
 
 import SourceCard from "../source-card";
 import StreamingSummary from "../streaming-summary";

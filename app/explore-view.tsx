@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
 import { PENDING_CATEGORY_KEY } from "@/app/command-palette";
-import type { HistoryPoint } from "@/lib/api/types";
+import type { HistoryPoint } from "@/types/api/keyword";
 
 type Column = { clock: string; label: string; isLatest: boolean };
 type KeywordOption = { keyword: string; slug: string; category: string; rank: number };
