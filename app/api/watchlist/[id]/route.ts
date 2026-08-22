@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 
 import { isDbConfigured } from "@/db";
-import { errorResponse, getUserId, handleRouteError } from "@/lib/api/http";
-import { removeWatchlistItem } from "@/lib/api/service";
+import { getUserId } from "@/server/http/auth";
+import { errorResponse, handleRouteError } from "@/server/http/errors";
+import { removeWatchlistItem } from "@/server/services/watchlist.service";
 
 /** 3.6 DELETE /api/watchlist/:id — 삭제. 남의 항목이면 404(존재 여부를 흘리지 않는다). */
 export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {

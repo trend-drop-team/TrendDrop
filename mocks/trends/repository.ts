@@ -1,28 +1,24 @@
 /**
  * mock 폴백 소스.
  *
- * DB가 없거나 통합 스키마가 아직 반영되지 않았을 때, API 계층이 내려주는 데이터를
- * 기존 mock(`lib/trend-data.ts`, `lib/trend-timeline.ts`)에서 스펙 형태로 조립한다.
+ * DB가 없거나 쿼리가 실패했을 때, API 계층이 내려주는 데이터를 mock(`data.ts`,
+ * `timeline.ts`)에서 스펙 형태로 조립한다.
  * 12개 스냅샷을 12개 run으로 취급하므로 runId ↔ snapshot.id가 1:1 대응한다.
  */
-import { slugify } from "@/lib/api/common";
-import type {
-  CategoryRow,
-  HeatmapPayload,
-  HistoryPoint,
-  KeywordDetail,
-  TickerRow,
-  TimelineSnapshot,
-  TrendRow,
-  WatchlistRow,
-} from "@/lib/api/types";
-import { realtimeTrends, dailyTrends, watchItems } from "@/lib/trend-data";
+import { slugify } from "@/lib/utils/slug";
+import type { CategoryRow } from "@/types/api/category";
+import type { HeatmapPayload } from "@/types/api/heatmap";
+import type { HistoryPoint, KeywordDetail } from "@/types/api/keyword";
+import type { TickerRow, TimelineSnapshot, TrendRow } from "@/types/api/trend";
+import type { WatchlistRow } from "@/types/api/watchlist";
+
+import { realtimeTrends, dailyTrends, watchItems } from "./data";
 import {
   getCategoryHeat,
   getTickerItems,
   snapshots as mockSnapshots,
   type RankedItem,
-} from "@/lib/trend-timeline";
+} from "./timeline";
 
 const detailByKeyword = new Map(realtimeTrends.map((trend) => [trend.keyword, trend]));
 

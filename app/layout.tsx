@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 
-import { getCategories, getTrends } from "@/lib/api/service";
 import { getDocList } from "@/lib/docs";
+import { getCategories } from "@/server/services/category.service";
+import { getTrends } from "@/server/services/trend.service";
 
 import AppNav from "./app-nav";
 import CommandPalette from "./command-palette";

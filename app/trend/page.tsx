@@ -1,6 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 
-import { getTrends } from "@/lib/api/service";
+import { getTrends } from "@/server/services/trend.service";
 
 export const dynamic = "force-dynamic";
 

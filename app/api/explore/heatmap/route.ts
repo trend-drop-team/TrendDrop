@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 
-import { parseWindowHours } from "@/lib/api/common";
-import { handleRouteError } from "@/lib/api/http";
-import { getHeatmap } from "@/lib/api/service";
+import { parseWindowHours } from "@/server/http/query";
+import { handleRouteError } from "@/server/http/errors";
+import { getHeatmap } from "@/server/services/heatmap.service";
 
 /** 3.5 GET /api/explore/heatmap?window=12h — /explore 카테고리 히트맵. */
 export async function GET(request: Request) {

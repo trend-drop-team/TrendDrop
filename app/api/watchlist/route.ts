@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 
 import { isDbConfigured } from "@/db";
-import { errorResponse, getUserId, handleRouteError } from "@/lib/api/http";
-import { addWatchlistItem, getWatchlist } from "@/lib/api/service";
+import { getUserId } from "@/server/http/auth";
+import { errorResponse, handleRouteError } from "@/server/http/errors";
+import { addWatchlistItem, getWatchlist } from "@/server/services/watchlist.service";
 
 /** 3.6 GET /api/watchlist — 저장한 키워드 목록. */
 export async function GET(request: Request) {

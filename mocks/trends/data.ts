@@ -25,28 +25,8 @@ export type WatchItem = {
   score: string;
 };
 
-export type RankDelta = {
-  kind: "up" | "down" | "new" | "same";
-  diff: number;
-};
-
 /** 렌더 중 시각 계산은 하이드레이션을 깨뜨리므로 갱신 시각은 고정 문자열로 둔다. */
 export const lastUpdatedLabel = "3분 전 갱신";
-
-/** 구조적 타입으로 받아 TrendItem과 시계열 RankedItem 양쪽에 모두 쓸 수 있다. */
-export function getRankDelta(item: { rank: number; previousRank?: number | null }): RankDelta {
-  const previous = item.previousRank;
-
-  if (previous === null || previous === undefined) {
-    return { kind: "new", diff: 0 };
-  }
-
-  const diff = previous - item.rank;
-
-  if (diff > 0) return { kind: "up", diff };
-  if (diff < 0) return { kind: "down", diff: Math.abs(diff) };
-  return { kind: "same", diff: 0 };
-}
 
 /** 실시간 집계(기본). `trends`는 하위 호환을 위해 이 배열을 그대로 참조한다. */
 export const realtimeTrends: TrendItem[] = [

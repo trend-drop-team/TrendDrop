@@ -6,8 +6,8 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { CATEGORY_EVENT, PENDING_CATEGORY_KEY } from "@/app/command-palette";
 import { INTERESTS_EVENT, INTERESTS_KEY } from "@/app/onboarding";
 import RollingNumber from "@/app/rolling-number";
-import type { TimelineSnapshot, TrendRow } from "@/lib/api/types";
-import { getRankDelta } from "@/lib/trend-data";
+import { getRankDelta } from "@/lib/utils/rank";
+import type { TimelineSnapshot, TrendRow } from "@/types/api/trend";
 
 type Period = "realtime" | "daily";
 
