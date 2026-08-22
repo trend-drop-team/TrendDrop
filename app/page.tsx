@@ -2,7 +2,6 @@ import Onboarding from "@/app/onboarding";
 import RankingBoard from "@/app/ranking-board";
 import { getCategories } from "@/server/services/category.service";
 import { getTimeline, getTrends } from "@/server/services/trend.service";
-import CollectionControls from "@/components/collection-controls";
 
 /** 랭킹 밖에서 올라오고 있는 "예비" 키워드로 볼 상위 컷. */
 const WATCH_FROM_RANK = 10;
@@ -34,8 +33,6 @@ export default async function HomePage() {
         <Onboarding categories={categories} />
 
         <RankingBoard snapshots={snapshots} daily={dailyResult.data} categories={categories} />
-
-        <CollectionControls />
 
         {upcoming.length > 0 && (
           <section className="panel watchlist-panel">
