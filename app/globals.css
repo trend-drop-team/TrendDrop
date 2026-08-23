@@ -2794,3 +2794,137 @@ body {
   cursor: not-allowed;
 }
 
+
+/* ── 로딩 스켈레톤 ─────────────────────────────────────────────
+   각 라우트의 loading.tsx가 공유한다. 실제 화면의 컨테이너 클래스
+   (.page-shell/.panel, .td/.td-panel 등)를 그대로 재사용하고 그 안의
+   텍스트 자리만 .sk 막대로 대신한다 — 데이터가 들어올 때 레이아웃이
+   튀지 않게 하려는 것. 세로 여백은 실제 화면과 같은 값을 쓴다. */
+
+@keyframes sk-pulse {
+  0%,
+  100% {
+    opacity: 0.5;
+  }
+
+  50% {
+    opacity: 0.85;
+  }
+}
+
+.sk {
+  display: block;
+  border-radius: 8px;
+  background: var(--surface-inset);
+  animation: sk-pulse 1.5s ease-in-out infinite;
+}
+
+/* 스켈레톤 안에서는 여백을 직접 준다(실제 요소의 margin에 기대지 않음). */
+.sk-stack {
+  display: grid;
+  gap: 16px;
+}
+
+.sk-stack-lg {
+  display: grid;
+  gap: 28px;
+}
+
+.sk-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.sk-kicker {
+  width: 128px;
+  height: 13px;
+}
+
+.sk-title {
+  width: min(420px, 78%);
+  height: 34px;
+  border-radius: 10px;
+}
+
+.sk-byline {
+  width: 180px;
+  height: 13px;
+}
+
+.sk-h2 {
+  width: 148px;
+  height: 17px;
+}
+
+.sk-pill {
+  width: 68px;
+  height: 26px;
+  border-radius: 999px;
+}
+
+.sk-line {
+  width: 100%;
+  height: 13px;
+}
+
+.sk-line-short {
+  width: 62%;
+}
+
+.sk-line-mid {
+  width: 84%;
+}
+
+.sk-chart {
+  width: 100%;
+  height: 168px;
+  border-radius: var(--radius-sm);
+}
+
+.sk-stat-value {
+  width: 64px;
+  height: 24px;
+  margin-bottom: 12px;
+}
+
+.sk-stat-label {
+  width: 82px;
+  height: 12px;
+}
+
+.sk-rank-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 18px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.sk-rank-row:last-child {
+  border-bottom: none;
+}
+
+.sk-rank-num {
+  flex: none;
+  width: 28px;
+  height: 22px;
+}
+
+.sk-rank-body {
+  flex: 1;
+  display: grid;
+  gap: 10px;
+}
+
+.sk-rank-score {
+  flex: none;
+  width: 54px;
+  height: 20px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sk {
+    animation: none;
+  }
+}
