@@ -209,14 +209,14 @@ export default function ExploreView({
         <h1 id="explore-title" className="explore-title">
           탐색
         </h1>
-        <p className="explore-sub">카테고리 열기 흐름과 키워드 비교</p>
+        <p className="explore-sub">카테고리별 열기와 키워드 비교</p>
       </header>
 
       {/* --- 카테고리 × 시간 히트맵 --- */}
       <div className="explore-panel">
         <div className="explore-panel-head">
           <p className="explore-eyebrow">카테고리 히트맵</p>
-          <p className="explore-hint">셀이 진할수록 그 시점에 뜨거운 카테고리 · 행을 누르면 랭킹에서 필터</p>
+          <p className="explore-hint">행을 누르면 그 카테고리로 랭킹이 좁혀집니다</p>
         </div>
 
         <div className="heat-scroll">
@@ -274,7 +274,7 @@ export default function ExploreView({
       <div className="explore-panel">
         <div className="explore-panel-head">
           <p className="explore-eyebrow">키워드 A/B 비교</p>
-          <p className="explore-hint">최근 12시간 순위 궤적 (위로 갈수록 상위)</p>
+          <p className="explore-hint">최근 12시간 순위 변화 (위로 갈수록 상위)</p>
         </div>
 
         <div className="compare-picks">

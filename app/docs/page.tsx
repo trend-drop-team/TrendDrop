@@ -11,7 +11,7 @@ export default function DocsIndexPage() {
         <section className="hero-grid docs-hero-grid">
           <div className="hero-copy">
             <p className="eyebrow">PROJECT NOTES</p>
-            <h1>정리해둔 기획 문서를 브라우저에서 바로 읽는 공간</h1>
+            <h1>기획 문서</h1>
             <p className="hero-text">
               TrendDrop 리서치와 서비스 방향 문서를 Next.js 앱 안에서 바로 읽을 수 있게 정리했습니다.
             </p>

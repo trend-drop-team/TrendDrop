@@ -20,15 +20,14 @@
   color: var(--text);
 }
 
-.td h1,
-.td h2,
-.td p,
-.td blockquote {
+/* 태그 기본 여백만 걷어내는 리셋. :where()로 특이도를 0으로 만들어야
+   .td-h2 / .td-eyebrow 같은 클래스가 선언한 여백을 덮어쓰지 않는다.
+   (`.td h2`(0,1,1)가 `.td-h2`(0,1,0)를 이겨서 여백이 전부 죽어 있었다.) */
+:where(.td h1, .td h2, .td p, .td blockquote) {
   margin: 0;
 }
 
-.td ul,
-.td ol {
+:where(.td ul, .td ol) {
   margin: 0;
   padding: 0;
   list-style: none;
@@ -246,7 +245,9 @@
 
 .td-reasons li {
   display: grid;
-  grid-template-columns: 150px 1fr;
+  /* 출처 라벨('gtrends', 'youtube')은 60~90px이다. 행끼리 본문 왼쪽 끝을 맞춰야 해서
+     고정폭을 쓰되, 라벨 길이에 맞춰 잡는다(150px이면 90px이 빈 채로 남았다). */
+  grid-template-columns: 100px 1fr;
   gap: 14px;
   padding: 18px 0;
   border-top: 1px solid var(--line);
@@ -552,16 +553,6 @@
 }
 
 /* --- 근거 타임라인 --- */
-.td-tl-lead {
-  margin: 0 0 20px;
-  line-height: 1.6;
-  color: var(--muted);
-}
-
-.td-tl-lead strong {
-  color: var(--accent);
-}
-
 .td-timeline {
   display: grid;
   gap: 0;
@@ -674,17 +665,6 @@
 }
 
 /* --- 출처 카드 --- */
-.td-source-note {
-  margin: 0 0 16px;
-  padding: 10px 12px;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--line);
-  background: var(--accent-soft);
-  color: var(--text);
-  font-size: 0.84rem;
-  line-height: 1.5;
-}
-
 .td-source-grid {
   display: grid;
   gap: 14px;
