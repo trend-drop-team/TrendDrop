@@ -273,7 +273,7 @@ finishRun()  → collection_runs UPDATE (keyword_count 등)
 | `term`/`slug`   | 정식 이름(canonical 반영) / 한글 슬러그                                |
 | `source_id`     | 최초 발견 시 가중치 최상위 소스                                        |
 | `first_seen_at` | 최초 발견 시각(이후 안 바뀜 — 이미 있으면 `upsertKeyword`가 그대로 둠) |
-| `category_id`   | **항상 NULL** — 맨 아래 TODO 참고                                      |
+| `category_id`   | LLM 판정의 카테고리(→`categories`). 신규 승격 시 채우고, 기존 행은 비어 있을 때만 채움. keep=true인데 판정이 "일반어"인 드문 경우만 NULL |
 
 ### `trend_snapshots` — 실행별 top10
 
@@ -300,7 +300,7 @@ reasons=[{"source":"youtube","weight":43,"text":"NCT 127 엔시티 127 'Piñata'
 | 컬럼                                                                 | 내용                                                                   |
 | -------------------------------------------------------------------- | ---------------------------------------------------------------------- |
 | `term`(PK)/`keep`/`canonical`/`reason`/`sample`/`model`/`decided_at` | 4장 참고                                                               |
-| `content_type`                                                       | 인물/작품·콘텐츠/…/일반어/문법조각. `categories`(UI 탭 축)와는 다른 축 |
+| `content_type`                                                       | 인물/작품·콘텐츠/…/일반어/문법조각. 노이즈 2종(일반어·문법조각)을 뺀 7종이 `categories` 마스터가 됨 |
 
 ---
 
@@ -470,7 +470,7 @@ dcbest 49 · theqoo 20 · instiz 10 · youtube 110 · gtrends 10 = 199건
 
 ## TODO
 
-**카테고리(`keywords.category_id`)** — 계속 NULL. `keyword_verdicts.content_type`(인물/사건·사고/스포츠 등, 이미 판정·캐싱됨)을 그대로 `categories`/`category_id`로 옮기면 추가 LLM 비용 없이 채울 수 있음. 단 지금 `categories`(푸드/뷰티/테크)는 이 파이프라인 콘텐츠와 축이 안 맞아서(예전에 억지로 매핑했다가 87%가 "기타") **`categories` 마스터 목록 자체를 이 파이프라인 도메인에 맞게 바꿀지부터 팀(송하은/UI 담당)과 확인 필요**. master/v-he가 폐기되면 다른 파이프라인이 필요로 하는 카테고리가 없어지므로 바꾸기 더 쉬워짐.
+**카테고리(`keywords.category_id`)** — ✅ 2026-09-02 해결. content_type 축(인물/사건·사고 등)을 공식 카테고리로 채택 — `store.mjs`가 `categories` 7행(일반어·문법조각 제외)을 시드하고, 랭킹 저장 시 `upsertKeyword`가 verdict 카테고리를 `category_id`로 연결한다. 기존 키워드는 `backfill-categories.mjs`로 일괄 백필했다(LLM 호출 0회, 314/316 채움). 예전 우려였던 푸드/뷰티/테크 축은 실제 DB에 시드된 적이 없어 충돌 없이 전환했다. UI 탭 구성은 `/api/categories`가 이 테이블을 그대로 읽으므로 자동 반영된다.
 
 **`trend_contents`(상세페이지 "근거 콘텐츠" 카드)** — 지금 아예 안 씀. 필요한 필드: `url`/`thumbnail_url`/`metric_label`/`excerpt`.
 
