@@ -37,6 +37,7 @@ const DEFAULTS = {
   minMentions: 2, // 1회성 단어 제거
   keepSources: ["gtrends"], // 이 소스에 있으면 minMentions 무시하고 통과
   limit: 30,
+  windowHours: 6,
 };
 
 /** 같은 영상의 댓글이 같은 단어를 반복해 점수를 부풀리는 걸 막는다. */
@@ -109,6 +110,14 @@ export function rankPopular(rows, options = {}) {
   }
 
   const acc = new Map();
+  const latestBucket = rows.reduce((latest, row) =>
+    !latest || row.bucketAt > latest ? row.bucketAt : latest, null);
+  const latestTime = Date.parse(latestBucket);
+  const recentStart = latestTime - 60 * 60 * 1000;
+  const baselineStart = latestTime - opt.windowHours * 60 * 60 * 1000;
+  const recentCounts = new Map();
+  const baselineCounts = new Map();
+  const baselineBucketsByTerm = new Map();
   const seenVideo = new Set();
   const skipped = new Map(); // 가중치 미정의 site|kind 진단용
   let boosted = 0; // 참여도 보정이 실제로 걸린 행 수(진단용)
@@ -152,6 +161,17 @@ export function rankPopular(rows, options = {}) {
       }
       entry.score += weight;
       entry.mentions += 1;
+      const bucketTime = Date.parse(row.bucketAt);
+      if (bucketTime >= recentStart) recentCounts.set(token, (recentCounts.get(token) ?? 0) + 1);
+      else if (bucketTime >= baselineStart) {
+        baselineCounts.set(token, (baselineCounts.get(token) ?? 0) + 1);
+        let buckets = baselineBucketsByTerm.get(token);
+        if (!buckets) {
+          buckets = new Set();
+          baselineBucketsByTerm.set(token, buckets);
+        }
+        buckets.add(row.bucketAt);
+      }
       entry.sources.set(row.site, (entry.sources.get(row.site) ?? 0) + weight);
       entry.units.add(key);
       entry.boostSum += boost;
@@ -185,6 +205,15 @@ export function rankPopular(rows, options = {}) {
       // 확산 속도(0~10) — 참여도 보정(videoBoost/trafficBoost/commentBoost)의 평균.
       // 보정 없는 커뮤니티만 언급되면 1에 가깝고, 조회수·좋아요·검색량이 높을수록 커진다.
       velocity: clamp(entry.boostSum / Math.max(entry.boostCount, 1), 0.5, 10),
+      recentMentions: recentCounts.get(term) ?? 0,
+      baselineMentions: baselineCounts.get(term) ?? 0,
+      risingScore: Math.round(clamp(
+        ((recentCounts.get(term) ?? 0) / Math.max(
+          (baselineCounts.get(term) ?? 0) / Math.max(baselineBucketsByTerm.get(term)?.size ?? 1, 1) + 1,
+          1
+        )) * 50,
+        0, 100
+      )),
     });
   }
 
@@ -194,6 +223,10 @@ export function rankPopular(rows, options = {}) {
     ranked: ranked.slice(0, opt.limit),
     meta: {
       rows: rows.length,
+      baselineBuckets: new Set(rows.filter((row) => {
+        const time = Date.parse(row.bucketAt);
+        return time >= baselineStart && time < recentStart;
+      }).map((row) => row.bucketAt)).size,
       candidates: acc.size,
       passed: ranked.length,
       boostedRows: boosted,

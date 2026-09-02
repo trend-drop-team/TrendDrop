@@ -9,6 +9,8 @@ export type TrendRow = {
   growth: string;
   velocity: string;
   score: number;
+  /** 최근 1시간 증가세 점수(0~100). */
+  risingScore: number;
   source: string;
   summary: string;
   /** 호버 프리뷰 "왜 뜨나" 한 줄. reasons 첫 항목에서 뽑는다. */

@@ -32,7 +32,7 @@ if (rows.length === 0) {
 const bucketAt = rows[rows.length - 1].bucketAt;
 // 창 안에 실제로 존재한 버킷 수. windowHours보다 적으면 그만큼 수집이 빠진 것.
 const buckets = new Set(rows.map((r) => r.bucketAt)).size;
-const { ranked: pool, meta } = rankPopular(rows, { limit: poolSize });
+const { ranked: pool, meta } = rankPopular(rows, { limit: poolSize, windowHours });
 const { ranked, stats } = await applyVerdicts(pool, { topN, allowApi: useLlm });
 
 const short = (s, n = 44) => (s.length > n ? s.slice(0, n) + "…" : s);

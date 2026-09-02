@@ -14,6 +14,8 @@ type Period = "realtime" | "daily";
 /** 실시간 스냅샷과 24시간 집계가 공유하는 행 형태 — 둘 다 API의 TrendRow다. */
 type Row = TrendRow;
 
+const RISING_BADGE_THRESHOLD = 85;
+
 type Props = {
   /** 시점별 랭킹(오래된 → 최신). 타임머신 슬라이더의 눈금이자 실시간 탭의 데이터 소스. */
   snapshots: TimelineSnapshot[];
@@ -751,7 +753,12 @@ export default function RankingBoard({ snapshots, daily, categories }: Props) {
                   <span className={`rank-num${item.rank <= 3 ? " is-top" : ""}`}>{item.rank}</span>
 
                   <span className="rank-main">
-                    <span className="rank-keyword">{item.keyword}</span>
+                    <span className="rank-keyword-row">
+                      <span className="rank-keyword">{item.keyword}</span>
+                      {item.risingScore >= RISING_BADGE_THRESHOLD && (
+                        <span className="rank-rising-badge">급상승</span>
+                      )}
+                    </span>
                     <span className="rank-cat">{item.category}</span>
                   </span>
 
