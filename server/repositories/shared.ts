@@ -21,6 +21,7 @@ export type SnapshotRow = {
   keywordId: number;
   rank: number | null;
   score: number | null;
+  risingScore: number | null;
   growthRate: string | null;
   velocity: string | null;
   summary: string | null;
@@ -73,6 +74,7 @@ export async function snapshotsForRuns(runIds: number[]): Promise<SnapshotRow[]>
       keywordId: trendSnapshots.keywordId,
       rank: trendSnapshots.rank,
       score: trendSnapshots.score,
+      risingScore: trendSnapshots.risingScore,
       growthRate: trendSnapshots.growthRate,
       velocity: trendSnapshots.velocity,
       summary: trendSnapshots.summary,

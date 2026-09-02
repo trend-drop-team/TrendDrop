@@ -433,9 +433,10 @@ export async function saveTrendSnapshots(runId, bucketAt, ranked) {
       const velocity = typeof k.velocity === "number" ? `${k.velocity.toFixed(1)}/10` : null;
 
       await tx`INSERT INTO trend_snapshots
-        (keyword_id, run_id, rank, score, growth_rate, velocity, mentions, reasons, source_label, captured_at)
+        (keyword_id, run_id, rank, score, growth_rate, velocity, mentions, rising_score, baseline_mentions, reasons, source_label, captured_at)
         VALUES (${keywordIds[i]}, ${runId}, ${i + 1}, ${Math.round(k.score)}, ${growthRate}, ${velocity},
-                ${k.mentions ?? null}, ${tx.json(reasons)}, ${sourceLabel}, ${bucketAt})`;
+                ${k.mentions ?? null}, ${k.risingScore ?? null}, ${k.baselineMentions ?? null},
+                ${tx.json(reasons)}, ${sourceLabel}, ${bucketAt})`;
     }
   });
   return ranked.length;
