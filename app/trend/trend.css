@@ -20,15 +20,14 @@
   color: var(--text);
 }
 
-.td h1,
-.td h2,
-.td p,
-.td blockquote {
+/* 태그 기본 여백만 걷어내는 리셋. :where()로 특이도를 0으로 만들어야
+   .td-h2 / .td-eyebrow 같은 클래스가 선언한 여백을 덮어쓰지 않는다.
+   (`.td h2`(0,1,1)가 `.td-h2`(0,1,0)를 이겨서 여백이 전부 죽어 있었다.) */
+:where(.td h1, .td h2, .td p, .td blockquote) {
   margin: 0;
 }
 
-.td ul,
-.td ol {
+:where(.td ul, .td ol) {
   margin: 0;
   padding: 0;
   list-style: none;
@@ -246,7 +245,9 @@
 
 .td-reasons li {
   display: grid;
-  grid-template-columns: 150px 1fr;
+  /* 출처 라벨('gtrends', 'youtube')은 60~90px이다. 행끼리 본문 왼쪽 끝을 맞춰야 해서
+     고정폭을 쓰되, 라벨 길이에 맞춰 잡는다(150px이면 90px이 빈 채로 남았다). */
+  grid-template-columns: 100px 1fr;
   gap: 14px;
   padding: 18px 0;
   border-top: 1px solid var(--line);
@@ -480,4 +481,285 @@
   .td-live-dot {
     animation: none;
   }
+}
+
+/* ============================================================ */
+/* 3단계-A: AI 요약 스트리밍 · 근거 타임라인 · 출처 카드 (append) */
+/* ============================================================ */
+
+/* --- AI 요약 스트리밍 --- */
+.td-ai {
+  margin: 0 0 18px;
+}
+
+.td-ai-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.td-ai-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: var(--label-spacing);
+  text-transform: var(--label-transform);
+}
+
+.td-ai-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.74rem;
+  color: var(--muted);
+}
+
+.td-ai-status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: td-ai-blink 1s ease-in-out infinite;
+}
+
+.td-ai-text {
+  margin: 0;
+  min-height: 1.6em;
+}
+
+.td-ai-cursor {
+  display: inline-block;
+  margin-left: 1px;
+  color: var(--accent);
+  font-weight: 700;
+  animation: td-ai-blink 0.9s step-end infinite;
+}
+
+@keyframes td-ai-blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.15;
+  }
+}
+
+/* --- 근거 타임라인 --- */
+.td-timeline {
+  display: grid;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.td-tl-item {
+  position: relative;
+  display: grid;
+  grid-template-columns: 20px 1fr;
+  gap: 14px;
+  padding: 0 0 22px;
+}
+
+/* 노드 사이 커넥터 (마지막 제외) */
+.td-tl-item:not(:last-child) .td-tl-marker::before {
+  content: "";
+  position: absolute;
+  top: 16px;
+  bottom: -4px;
+  left: 50%;
+  width: 2px;
+  transform: translateX(-50%);
+  background: var(--line-strong);
+}
+
+.td-tl-marker {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  padding-top: 3px;
+}
+
+.td-tl-dot {
+  position: relative;
+  z-index: 1;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid var(--surface);
+  background: var(--muted);
+  box-shadow: 0 0 0 3px var(--surface);
+}
+
+/* kind별 색: spark=시안 / spread·surge=그린 / search=muted */
+.td-tl-spark .td-tl-dot {
+  background: var(--accent-3);
+}
+
+.td-tl-spread .td-tl-dot,
+.td-tl-surge .td-tl-dot {
+  background: var(--accent);
+}
+
+.td-tl-surge .td-tl-dot {
+  box-shadow: 0 0 0 3px var(--surface), 0 0 10px var(--glow-line);
+}
+
+.td-tl-search .td-tl-dot {
+  background: var(--muted);
+}
+
+.td-tl-body {
+  padding-top: 1px;
+}
+
+.td-tl-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.td-tl-time {
+  font-family: var(--font-num);
+  font-variant-numeric: var(--num-variant);
+  font-size: 0.76rem;
+  color: var(--muted);
+}
+
+.td-tl-channel {
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--surface-soft);
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: var(--label-spacing);
+  text-transform: var(--label-transform);
+}
+
+.td-tl-spark .td-tl-channel {
+  color: var(--accent-3);
+  border-color: var(--accent-2-soft);
+}
+
+.td-tl-spread .td-tl-channel,
+.td-tl-surge .td-tl-channel {
+  color: var(--accent);
+  border-color: var(--accent-soft);
+}
+
+.td-tl-text {
+  margin: 0;
+  line-height: 1.55;
+  font-size: 0.94rem;
+}
+
+/* --- 출처 카드 --- */
+.td-source-grid {
+  display: grid;
+  gap: 14px;
+}
+
+.td-source-card {
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface-soft);
+  transition: transform 0.28s var(--spring), box-shadow 0.28s ease, border-color 0.2s ease;
+}
+
+.td-source-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--glow-line);
+  box-shadow: var(--shadow);
+}
+
+.td-source-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.td-source-head .td-thumb {
+  width: 46px;
+  height: 46px;
+  flex: none;
+  border-radius: 12px;
+  font-size: 0.95rem;
+}
+
+.td-source-body {
+  min-width: 0;
+}
+
+.td-source-excerpt {
+  overflow: hidden;
+  margin: 12px 0 0;
+  padding: 10px 12px;
+  border-left: 3px solid var(--accent);
+  border-radius: 0 8px 8px 0;
+  background: var(--surface-inset);
+  color: var(--text);
+  font-size: 0.88rem;
+  line-height: 1.55;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+}
+
+.td-source-excerpt.is-open {
+  -webkit-line-clamp: none;
+  line-clamp: none;
+}
+
+.td-source-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 10px;
+}
+
+.td-source-toggle {
+  padding: 5px 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.78rem;
+  cursor: pointer;
+  transition: border-color 0.2s ease, color 0.2s ease;
+}
+
+.td-source-toggle:hover {
+  border-color: var(--glow-line);
+  color: var(--accent);
+}
+
+.td-source-toggle:focus-visible,
+.td-source-link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.td-source-link {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--accent-3);
+}
+
+.td-source-link:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }

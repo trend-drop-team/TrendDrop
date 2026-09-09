@@ -10,6 +10,12 @@ export type DocEntry = {
 
 export const docs: DocEntry[] = [
   {
+    slug: "ui-feature-roadmap",
+    title: "UI/UX 기능 로드맵",
+    description: "실시간 랭킹·타임머신·커맨드 팔레트 등 남은 UI 작업과 바이럴/공유 플랜 정리",
+    filePath: "ui-feature-roadmap.md",
+  },
+  {
     slug: "trend-services-research",
     title: "트렌드 서비스 조사",
     description: "해외·국내 트렌드 서비스 특징과 차별화 포인트를 정리한 문서",

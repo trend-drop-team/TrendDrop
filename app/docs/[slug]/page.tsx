@@ -22,27 +22,13 @@ export default async function DocDetailPage({
 
   return (
     <div className="page-shell">
-      <header className="hero docs-hero">
-        <nav className="topbar">
-          <div className="brand">
-            <span className="brand-mark">TD</span>
-            <div>
-              <p className="brand-name">TrendDrop</p>
-              <p className="brand-sub">Research library</p>
-            </div>
-          </div>
-          <div className="link-cluster">
-            <Link className="ghost-button link-button" href="/docs">
-              문서 목록
-            </Link>
-            <Link className="ghost-button link-button" href="/">
-              홈으로 돌아가기
-            </Link>
-          </div>
-        </nav>
-      </header>
+      <main className="app-main">
+        <div className="doc-backlink">
+          <Link className="ghost-button link-button" href="/docs">
+            ← 문서 목록
+          </Link>
+        </div>
 
-      <main className="dashboard">
         <section className="panel docs-panel">
           <div className="panel-heading docs-panel-heading">
             <div>

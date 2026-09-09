@@ -1,21 +1,27 @@
 import { NextResponse } from "next/server";
 
-import { getTrendFeed } from "@/lib/trends-service";
+import { parseLimit, parsePeriod, parseRunId } from "@/server/http/query";
+import { handleRouteError } from "@/server/http/errors";
+import { getTrends } from "@/server/services/trend.service";
 
+/**
+ * 3.2 GET /api/trends?period=realtime|daily&category=&limit=30&runId=
+ *
+ * `runId`를 주면 그 시점 스냅샷을 그대로 돌려준다(홈 타임머신/타임랩스).
+ */
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
-  const category = searchParams.get("category") ?? undefined;
 
   try {
-    const payload = await getTrendFeed(category);
+    const payload = await getTrends({
+      period: parsePeriod(searchParams.get("period")),
+      category: searchParams.get("category") ?? undefined,
+      limit: parseLimit(searchParams.get("limit")),
+      runId: parseRunId(searchParams.get("runId")),
+    });
+
     return NextResponse.json(payload);
   } catch (error) {
-    return NextResponse.json(
-      {
-        error: "Failed to load trends",
-        detail: error instanceof Error ? error.message : "Unknown error",
-      },
-      { status: 500 }
-    );
+    return handleRouteError(error, "Failed to load trends");
   }
 }
