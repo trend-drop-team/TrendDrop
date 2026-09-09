@@ -1,170 +1,106 @@
-# 트렌드 평가 기준과 계산식
+# 데이터 수집 파이프라인 평가 기준
 
-> 상태: 평가 기준 제안 문서. 아래의 종합 평가 점수와 등급은 아직 파이프라인 코드에 반영되지 않았다.
+> 이 문서는 키워드의 인기나 유효성이 아니라 `collect.mjs`부터 `trend_snapshots` 저장까지 파이프라인 자체의 정상성·신뢰성·관측성을 평가하기 위한 기준이다.
 
-## 목적
-
-TrendDrop은 현재 최근 6시간 동안 여러 소스에서 많이 언급된 키워드를 `popular` 랭킹으로 만든다. 이 문서는 현재 구현된 인기 점수와, 이후 키워드의 상승세와 근거 신뢰도까지 평가하기 위한 기준을 같은 방식으로 재현할 수 있게 정리한다.
-
-## 현재 파이프라인
+## 평가 범위
 
 ```text
-collect.mjs
-  → raw_signals (시간 버킷별 원문)
-  → tokenize.mjs (토큰화)
-  → popular.mjs (인기 점수)
-  → verdict.mjs (LLM 유효성·canonical·category 판정)
-  → trend_snapshots (실행별 TOP 키워드)
+GitHub Actions → collect.mjs → raw_signals
+               → rank-popular.mjs → popular.mjs / verdict.mjs
+               → trend_snapshots
 ```
 
-수집은 매시간 실행되고, 랭킹은 현재 2시간마다 실행된다. 랭킹은 최신 버킷을 기준으로 직전 6시간의 원문을 읽는다. 버킷 수가 아니라 시간 범위를 기준으로 하므로, 수집이 누락된 시간대는 자동으로 보정하지 않는다.
+현재 수집은 매시간, 랭킹은 2시간마다 실행된다. 따라서 평가는 최종 키워드가 마음에 드는지를 보는 것이 아니라 각 실행이 예정된 시간에 수행됐고, 소스 결과가 유실 없이 다음 단계로 전달됐는지를 확인해야 한다.
 
-## 1. 현재 인기 점수
+## 핵심 지표
 
-현재 구현의 기본식은 다음과 같다.
+### 실행 완전성
 
 ```text
-popular_score
-  = Σ(source_weight × engagement_boost)
-    × cross_source_bonus
+execution_success_rate
+  = (success 또는 partial 실행 수 / 예정 실행 수) × 100
+
+full_success_rate = success 실행 수 / 예정 실행 수 × 100
+partial_rate      = partial 실행 수 / 예정 실행 수 × 100
+error_rate        = error 실행 수 / 예정 실행 수 × 100
 ```
 
-소스별 기본 가중치는 다음과 같다.
+목표는 수집 99% 이상, 랭킹 98% 이상이다. `partial`은 전체 장애가 아니지만 완전 성공으로 숨기지 않고 별도로 기록한다.
 
-| 소스·단위 | 기본 가중치 |
-|---|---:|
-| Google Trends 검색어 | 20 |
-| YouTube 영상 제목 | 12 |
-| YouTube 댓글 | 3 |
-| 디시인사이드 제목 | 4 |
-| 더쿠 제목 | 4 |
-| 인스티즈 제목 | 4 |
+### 소스 커버리지와 수집량
 
-참여도 보정은 원문 `meta`에 값이 있을 때만 적용된다.
-
-- Google Trends: `approxTraffic`를 기준으로 약 `×0.7~×1.8`
-- YouTube 제목: 조회수, 좋아요, 게시 후 경과시간으로 약 `×1~×3.5`
-- YouTube 댓글: 댓글 좋아요와 해당 영상의 확산속도로 보정
-- 커뮤니티 제목: 참여도 정보가 없으므로 현재 `×1`
-
-같은 키워드가 2개 이상의 독립 소스에서 나오면 `×1.25`를 적용한다. 일반 키워드는 기본적으로 2회 이상 언급되어야 하며, Google Trends에 등장한 키워드는 이 조건을 통과한다.
-
-같은 행 안의 동일 토큰은 한 번만 세고, YouTube 댓글은 같은 영상 안에서 같은 토큰이 반복되어도 한 번만 센다. 이는 댓글 수와 반복 노출 때문에 점수가 부풀려지는 것을 막기 위한 것이다.
-
-## 2. 제안하는 종합 평가 점수
-
-인기와 급상승은 서로 다른 성질이므로 하나의 원시 점수에 섞지 않고 각각 0~100으로 정규화한 뒤 합산한다.
+`collection_runs.api_call_log`의 `{source, items, error}`를 기준으로 소스별 성공과 수량을 계산한다.
 
 ```text
-evaluation_score
-  = 0.50 × popularity_score_100
-  + 0.30 × rising_score_100
-  + 0.20 × confidence_score_100
+source_success_rate = 오류 없이 응답한 실행 수 / 예정 실행 수 × 100
+source_coverage     = 실제 수집 소스 수 / 예정 소스 수 × 100
+volume_ratio        = 이번 수집 건수 / 최근 7일 동일 시간대 중앙값
 ```
 
-이 식은 제안 기준이며 현재 `popular.mjs`의 정렬 로직을 대체하지 않는다. 실제 적용 시에는 `trend_snapshots`에 세부 점수와 종합 점수를 함께 저장하는 것을 권장한다.
+권장 기준은 소스 성공률 95% 이상, 전체 소스 커버리지 100%, `volume_ratio` 0.7~1.3이다. 평소 200건이 들어오던 소스가 0건이면 API 오류가 없어도 수집 이상으로 분류한다. YouTube 키 미설정처럼 “정상 실행이지만 비활성화된 상태”와 API 오류는 구분해 기록해야 한다.
 
-### 인기 점수 정규화
-
-같은 랭킹 실행 안에서 후보의 원시 점수를 0~100으로 바꾼다.
+### 시간 신선도와 버킷 누락
 
 ```text
-popularity_score_100
-  = 100 × (score - min_score)
-          / max(max_score - min_score, 1)
+bucket_completeness = 실제 버킷 수 / 기대 버킷 수 × 100
+collection_lag      = captured_at - bucket_at
+freshness_sla_rate  = collection_lag ≤ 15분인 실행 수 / 전체 실행 수 × 100
 ```
 
-점수 분포가 한 후보에 지나치게 몰리는 경우에는 최대값 대신 후보 점수의 95퍼센타일을 상한으로 사용하는 방식을 검토한다.
+최근 24시간 버킷 완전성은 99% 이상, 15분 이내 수집 비율은 95% 이상을 목표로 한다. 랭킹 실행에서 `buckets < windowHours`이면 데이터 부족 상태로 남겨야 한다.
 
-### 상승세 점수
-
-최근 1시간의 언급량과 직전 24시간의 시간당 평균 언급량을 비교한다. 여기서 언급량은 단순 행 개수보다 현재 인기 점수와 같은 소스 가중치를 적용한 보정 언급량을 사용하는 것이 좋다.
+### 저장·중복·처리 정합성
 
 ```text
-recent = 최근 1시간 보정 언급량
-baseline = 직전 24시간 보정 언급량 / 실제 존재한 시간 버킷 수
-
-growth_ratio = (recent + 1) / (baseline + 1)
-
-rising_score_100
-  = clamp(100 × log2(growth_ratio + 1) / log2(9), 0, 100)
+persist_rate = DB 신규 raw_signals 수 / 어댑터 반환 행 수 × 100
+duplicate_rate = 중복으로 무시된 행 수 / 어댑터 반환 행 수 × 100
+snapshot_completeness = 저장 snapshot 수 / 목표 TOP_N × 100
+snapshot_link_rate = 유효한 keyword_id·run_id snapshot 수 / 전체 snapshot 수 × 100
 ```
 
-예를 들어 평소 시간당 2회이던 키워드가 최근 1시간에 10회 등장하면 `growth_ratio = 11/3 ≈ 3.67`이고, 상승세 점수는 약 66점이다. 반대로 최근 언급량이 많아도 과거부터 계속 높았다면 상승세 점수는 낮게 나온다.
+`persist_rate`는 100%에 가깝고 snapshot 완전성·참조 무결성은 100%가 목표다. 같은 `source_id`, `text_hash`, `bucket_at` 중복은 제거해야 하지만, 버킷이 다른 동일 원문은 체류시간 신호이므로 보존해야 한다.
 
-현재 코드의 `recentMentions`, `baselineMentions`, `risingScore`는 이 기준의 출발점으로 활용할 수 있다.
-
-### 근거 신뢰도 점수
-
-근거 신뢰도는 키워드가 얼마나 다양한 곳에서, 얼마나 지속적으로, 실제 참여 신호와 함께 등장했는지를 평가한다.
+### 재현성과 장애 관측성
 
 ```text
-confidence_score_100
-  = 0.50 × source_breadth_score
-  + 0.30 × persistence_score
-  + 0.20 × engagement_evidence_score
+ranking_reproducibility
+  = 동일 입력·동일 설정에서 동일한 순위 수 / 전체 순위 수 × 100
+
+diagnosable_run_rate
+  = 상태·오류·소스별 수량이 모두 기록된 실행 수 / 전체 실행 수 × 100
+
+silent_failure_rate
+  = 성공 처리됐지만 기대량 미달을 기록하지 못한 실행 수 / 전체 실행 수 × 100
 ```
 
-권장 하위 점수는 다음과 같다.
+재현성·진단 가능 실행률은 100%, 조용한 실패율은 0%가 목표다. 특히 소스 0건, 평소 대비 30% 미만 급감, 6시간 창의 버킷 부족, LLM fallback, 수집 반환량과 DB 저장량 불일치는 반드시 상태로 남겨야 한다.
+
+## 하루 단위 운영 판정
 
 ```text
-source_breadth_score
-  = min(소스 수 / 3, 1) × 100
-
-persistence_score
-  = min(등장한 시간 버킷 수 / 3, 1) × 100
-
-engagement_evidence_score
-  = 참여도 보정이 적용된 원문 비율 × 100
+정상
+  = full_success_rate ≥ 99%
+  AND 소스 성공률 ≥ 95%
+  AND bucket_completeness ≥ 99%
+  AND freshness_sla_rate ≥ 95%
+  AND persist_rate ≥ 99%
+  AND snapshot_link_rate = 100%
+  AND silent_failure_rate = 0%
 ```
 
-Google Trends 단독 키워드는 빠른 이슈 포착에는 유리하지만 근거 신뢰도는 낮게 시작한다. 반대로 여러 커뮤니티와 YouTube에서 2~3시간 이상 반복되고 참여도 데이터까지 있으면 높은 신뢰도를 얻는다.
+한 소스만 실패하고 나머지 조건을 만족하면 `부분 정상`, 버킷 누락이나 DB 저장 실패가 있으면 `장애`, 실행은 성공했지만 기대량 급감이나 LLM fallback을 기록하지 못하면 `관측 불능`으로 분류한다.
 
-## 3. 노출 판정
-
-종합 점수만으로 노출하지 않고 최소 조건을 함께 적용한다.
+## 비용과 보존성
 
 ```text
-노출 가능 조건
-  = LLM keep=true 또는 미판정 fallback
-  AND (언급 2회 이상 또는 Google Trends 등장)
-  AND evaluation_score ≥ 45
+llm_cache_hit_rate = 캐시 판정 수 / 전체 후보 수 × 100
+storage_growth_rate = 최근 7일 raw_signals 증가량 / 7
 ```
 
-등급은 다음처럼 해석한다.
+LLM 캐시 적중률은 기준선을 만든 뒤 20%p 이상 급락하면 후보 생성이나 캐시 키 변경을 조사한다. `raw_signals`는 계속 증가하므로 주간 증가량과 저장 한도 도달 예상일도 함께 확인한다.
 
-| 점수 | 등급 | 의미 |
-|---:|---|---|
-| 80~100 | S | 폭발적으로 상승 중인 이슈 |
-| 65~79 | A | 강하게 상승 중인 트렌드 |
-| 45~64 | B | 관심이 유지되는 트렌드 |
-| 0~44 | C | 탐색 후보 또는 노출 제외 |
+## 반영 순서
 
-등급은 사용자가 이해하기 위한 표현이고, 원시 점수와 각 구성 점수는 상세 화면에서 확인 가능해야 한다.
+현재 `collection_runs`의 `status`, `raw_signal_count`, `keyword_count`, `api_call_log`, `buckets`, `filtered`로 먼저 일일 리포트를 만든다. 이후 `duration_ms`, `expected_sources`, `source_volume_ratio`, `freshness_status`, `persisted_count`, `error_class`를 추가하면 위 지표를 자동화할 수 있다.
 
-## 4. 운영 검증 기준
-
-이 기준이 실제로 유효한지는 사람이 라벨링한 표본으로 검증한다. TOP 10뿐 아니라 LLM이 제거한 후보, 11~30위 후보, 단일 소스 후보도 함께 표본으로 뽑는다.
-
-최초 목표는 다음과 같다.
-
-```text
-TOP10 유효율 = 실제 트렌드인 TOP10 수 / 10
-목표: 80% 이상
-
-노이즈율 = 일반어·문법조각·중복 키워드 수 / 전체 후보 수
-목표: 15% 이하
-
-교차 소스 후보 유효율 ≥ 단일 소스 후보 유효율
-```
-
-2주 정도의 라벨이 쌓인 뒤 소스별 유효율과 점수 구간별 유효율을 비교해 가중치를 조정한다. 이때 점수 자체를 다시 정답으로 사용하지 않고, 사람이 판단한 `실제 트렌드 여부`, `canonical 정확성`, `근거 충분성`을 기준으로 평가한다.
-
-## 적용 순서
-
-1. 현재 `popular_score`와 기존 `risingScore`를 별도 필드로 보존한다.
-2. `confidence_score`를 추가하고 세 점수를 0~100으로 정규화한다.
-3. `evaluation_score`를 계산하되 기존 인기 순위와 병렬 비교한다.
-4. 사람 라벨링 결과로 TOP10 유효율을 확인한 뒤 기본 정렬 기준을 전환한다.
-
-이 순서를 따르면 기존 데이터와 화면을 깨뜨리지 않고, 인기와 급상승을 비교하면서 새 평가 기준을 검증할 수 있다.
+이 기준은 키워드의 내용 품질을 판정하지 않는다. 파이프라인이 신뢰할 수 있는 원문을 제시간에 빠짐없이 저장하고, 같은 입력에서 같은 결과를 재현하는지를 평가하는 데 목적이 있다.
