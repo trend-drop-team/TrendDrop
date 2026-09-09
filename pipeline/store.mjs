@@ -5,16 +5,18 @@
  * 스키마가 없으면 assertSchema()가 안내 메시지와 함께 즉시 중단시킨다.
  * (스키마 반영: `npm run db:push` 또는 `npx drizzle-kit push --config=drizzle.config.mjs`)
  *
- * 이 파이프라인이 쓰는 테이블 6개:
+ * 이 파이프라인이 쓰는 테이블 7개:
  *   sources             수집 소스 마스터 (dcbest/theqoo/instiz/youtube/gtrends 5행 고정) — 데이터만 시드
  *   raw_signals         수집 원문 (1시간 버킷). run_id로 어느 collect 실행에서 왔는지 귀속
  *   collection_runs     파이프라인 실행 로그. 이 파이프라인은 두 종류를 남긴다:
  *                          pipeline='collect'  매시간 1건 — raw_signals 소유
  *                          pipeline='popular'  랭킹마다 1건 — trend_snapshots 소유
  *                        (수집과 랭킹이 분리돼 있어 run 자체가 별개다. 11장 PIPELINE.md 참고)
- *   keywords             키워드 엔티티. category_id(FK→categories)는 당분간 채우지 않는다 —
- *                        UI 카테고리(푸드/뷰티/테크)와 이 파이프라인의 content_type(인물/사건사고 등)은
- *                        축이 달라 매핑 규칙이 없다.
+ *   categories           카테고리 마스터 — verdict.mjs CATEGORIES에서 노이즈 2종(일반어·문법조각)을
+ *                        뺀 7행 고정. sources처럼 데이터만 시드
+ *   keywords             키워드 엔티티. category_id(FK→categories)는 LLM 판정의 content_type으로
+ *                        채운다 — content_type 축(인물/사건·사고 등)을 공식 카테고리로 쓰기로 결정
+ *                        (예전 UI 축 푸드/뷰티/테크는 폐기. PIPELINE.md TODO 참고)
  *   trend_snapshots      랭킹 실행의 top-N. keyword_id FK, reasons(jsonb)에 소스별 근거 보관
  *   keyword_verdicts     LLM 판정 캐시
  *
@@ -82,6 +84,44 @@ export async function seedSources() {
     await s`INSERT INTO sources (name, kind) VALUES (${src.name}, ${src.kind})
       ON CONFLICT (name) DO NOTHING`;
   }
+}
+
+/**
+ * 카테고리 7행 고정 목록 — verdict.mjs CATEGORIES 중 keep=true 키워드가 받을 수 있는 것들.
+ * (일반어·문법조각은 keep=false 전용 노이즈 라벨이라 키워드로 승격되지 않아 뺐다.)
+ * verdict.mjs가 이 파일을 import하므로 순환을 피하려고 목록을 여기 복제한다 —
+ * verdict.mjs CATEGORIES를 바꾸면 여기도 같이 맞출 것.
+ */
+const CATEGORY_SEED = [
+  { name: "인물", slug: "people", sortOrder: 1 },
+  { name: "작품·콘텐츠", slug: "content", sortOrder: 2 },
+  { name: "기업·주식", slug: "business", sortOrder: 3 },
+  { name: "사건·사고", slug: "incident", sortOrder: 4 },
+  { name: "재난·속보", slug: "breaking", sortOrder: 5 },
+  { name: "정치·사회", slug: "politics", sortOrder: 6 },
+  { name: "스포츠", slug: "sports", sortOrder: 7 },
+];
+
+/** categories 7행 시드(멱등). seedSources와 같은 방식 — name UNIQUE 기준 ON CONFLICT. */
+export async function seedCategories() {
+  const s = await sql();
+  await assertSchema();
+  for (const c of CATEGORY_SEED) {
+    await s`INSERT INTO categories (name, slug, sort_order)
+      VALUES (${c.name}, ${c.slug}, ${c.sortOrder})
+      ON CONFLICT (name) DO NOTHING`;
+  }
+}
+
+/** 카테고리 이름(인물 등) → categories.id. sourceIdMap과 같은 캐시 패턴. */
+let categoryIdCache = null;
+async function categoryIdMap() {
+  if (categoryIdCache) return categoryIdCache;
+  const s = await sql();
+  await seedCategories();
+  const rows = await s`SELECT id, name FROM categories`;
+  categoryIdCache = new Map(rows.map((r) => [r.name, r.id]));
+  return categoryIdCache;
 }
 
 /** site 문자열(dcbest 등) → sources.id. 매번 새로 조회하지 않도록 캐시한다. */
@@ -243,6 +283,30 @@ export async function saveVerdicts(verdicts, model) {
 }
 
 /**
+ * 기존 keywords의 category_id 일괄 백필 — keyword_verdicts 캐시에서, LLM 재호출 없이.
+ * keywords.term은 병합된 canonical이므로 COALESCE(canonical, term) 기준으로 잇고,
+ * 같은 canonical에 판정이 여럿이면 최신 decided_at을 쓴다. 비어 있는 행만 채운다.
+ * 반환: 채운 행 수. (실행: node pipeline/backfill-categories.mjs)
+ */
+export async function backfillKeywordCategories() {
+  const s = await sql();
+  await assertSchema();
+  await seedCategories();
+  const res = await s`
+    UPDATE keywords k SET category_id = c.id
+    FROM (
+      SELECT DISTINCT ON (COALESCE(canonical, term))
+        COALESCE(canonical, term) AS term, content_type
+      FROM keyword_verdicts
+      WHERE keep AND content_type IS NOT NULL
+      ORDER BY COALESCE(canonical, term), decided_at DESC
+    ) v
+    JOIN categories c ON c.name = v.content_type
+    WHERE k.term = v.term AND k.category_id IS NULL`;
+  return res.count;
+}
+
+/**
  * growth_rate 표시 문자열. 직전 popular run에 이 키워드가 없었으면(prevScore == null)
  * 비교 기준이 없으므로 언급 횟수로 대신한다. score가 0이었던 적은 없어서(테이블에 안
  * 남으므로) prevScore === 0은 이론상 발생하지 않지만 나눗셈 보호용으로 남겨둔다.
@@ -265,29 +329,34 @@ function slugify(term) {
 }
 
 /**
- * term을 keywords 엔티티로 승격(멱등). 이미 있으면 그 id를 반환하고 아무것도
- * 바꾸지 않는다 — first_seen_at은 "최초" 발견 시각이라 이후 run에서 덮어쓰지 않는다.
+ * term을 keywords 엔티티로 승격(멱등). 이미 있으면 그 id를 반환한다 —
+ * first_seen_at은 "최초" 발견 시각이라 이후 run에서 덮어쓰지 않는다.
  *
- * category_id는 채우지 않는다(모듈 상단 주석 참고) — UI 카테고리 매핑이 결정되면
- * 이 함수에 파라미터를 추가한다.
+ * category_id는 신규 행에 채우고, 기존 행은 **비어 있을 때만** 채운다(자연 백필).
+ * 이미 붙은 카테고리는 덮어쓰지 않는다 — 판정이 흔들려 매 run 카테고리가 바뀌는 것을 막는다.
  *
  * slug는 한글 슬러그(공백→하이픈) 기본형을 쓰되, 서로 다른 term이 같은 슬러그로
  * 뭉개지는 드문 경우엔 짧은 난수를 붙여 갈라놓는다.
  */
-export async function upsertKeyword(term, { sourceId } = {}) {
+export async function upsertKeyword(term, { sourceId, categoryId } = {}) {
   const s = await sql();
   await assertSchema();
 
-  const existing = await s`SELECT id FROM keywords WHERE term = ${term}`;
-  if (existing.length > 0) return existing[0].id;
+  const existing = await s`SELECT id, category_id FROM keywords WHERE term = ${term}`;
+  if (existing.length > 0) {
+    if (categoryId != null && existing[0].category_id == null) {
+      await s`UPDATE keywords SET category_id = ${categoryId} WHERE id = ${existing[0].id}`;
+    }
+    return existing[0].id;
+  }
 
   const base = slugify(term);
   for (let attempt = 0; attempt < 3; attempt++) {
     const slug = attempt === 0 ? base : `${base}-${Math.random().toString(36).slice(2, 7)}`;
     try {
       const [row] = await s`
-        INSERT INTO keywords (term, slug, source_id)
-        VALUES (${term}, ${slug}, ${sourceId ?? null})
+        INSERT INTO keywords (term, slug, source_id, category_id)
+        VALUES (${term}, ${slug}, ${sourceId ?? null}, ${categoryId ?? null})
         ON CONFLICT (term) DO NOTHING
         RETURNING id`;
       if (row) return row.id;
@@ -316,15 +385,21 @@ export async function saveTrendSnapshots(runId, bucketAt, ranked) {
   const s = await sql();
   await assertSchema();
   const bySite = await sourceIdMap();
+  const byCategory = await categoryIdMap();
 
   // ranked에 있는 term은 전부 keywords로 승격한다(스펙 §2.10). source_id는
-  // 가중치가 가장 높은 소스로 추정. upsertKeyword는 트랜잭션 밖에서 순차 호출 —
+  // 가중치가 가장 높은 소스로 추정, category_id는 verdict.mjs가 붙인 카테고리 이름을
+  // categories.id로 변환(노이즈 카테고리 등 시드에 없는 이름이면 null).
+  // upsertKeyword는 트랜잭션 밖에서 순차 호출 —
   // 레이스 재시도 로직이 자체 커넥션을 쓰는 편이 트랜잭션 안에서보다 단순하다.
   const keywordIds = [];
   for (const k of ranked) {
     const topSite = k.sources?.[0]?.source ?? null;
     keywordIds.push(
-      await upsertKeyword(k.term, { sourceId: topSite ? bySite.get(topSite) ?? null : null })
+      await upsertKeyword(k.term, {
+        sourceId: topSite ? bySite.get(topSite) ?? null : null,
+        categoryId: k.category ? byCategory.get(k.category) ?? null : null,
+      })
     );
   }
 
