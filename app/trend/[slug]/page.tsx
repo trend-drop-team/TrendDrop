@@ -207,8 +207,9 @@ export default async function TrendDetailPage({ params }: { params: Promise<{ sl
         )}
 
         <section className="td-panel">
-          <p className="td-eyebrow">AI 요약 · 왜 뜨나</p>
-          <StreamingSummary text={detail.summary} />
+          <p className="td-eyebrow">왜 뜨나</p>
+          {/* 요약이 비면 빈 <p>가 min-height만큼 자리를 차지해 배지 밑에 빈 공간이 생긴다. */}
+          {detail.summary && <StreamingSummary text={detail.summary} />}
           <ol className="td-reasons">
             {detail.reasons.map((reason, index) => (
               <li key={`${reason.source}-${index}`}>
@@ -220,17 +221,13 @@ export default async function TrendDetailPage({ params }: { params: Promise<{ sl
         </section>
 
         <section className="td-panel">
-          <p className="td-eyebrow">근거 타임라인 · 언제 어디서 먼저 터졌나</p>
-          <p className="td-tl-lead">
-            검색이 아니라 <strong>저장·공유</strong>가 먼저 튀는 급상승 패턴. SNS 반응이 앞서고 검색은 뒤따릅니다.
-          </p>
+          <p className="td-eyebrow">근거 타임라인</p>
           <EvidenceTimeline detail={detail} />
         </section>
 
         {detail.related.length > 0 && (
           <section className="td-panel">
             <h2 className="td-h2">근거 콘텐츠</h2>
-            <p className="td-source-note">위 AI 요약은 아래 실제 게시물 근거에서 도출됐습니다.</p>
             <div className="td-source-grid">
               {detail.related.map((item, index) => (
                 <SourceCard

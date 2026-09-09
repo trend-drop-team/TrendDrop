@@ -23,25 +23,18 @@ const ROOT = process.cwd();
 const CSS_GLOBS = ["app", "components"]; // 여기서 *.css 를 수집
 const TSX_DIRS = ["app", "components"];
 // className 커버리지 예외 — 부모/코-클래스로 스타일되는 순수 마크업 훅.
-//  - app-tab-label/docs-panel-heading/watchlist-panel: 우리 마크업 훅
-//  - api-*-panel: 팀 api-lab 마커. `className="panel api-*-panel"`로 .panel이 스타일 제공(팀 원본도 미정의).
 const MARKUP_ONLY = new Set([
   "app-tab-label",
   "docs-panel-heading",
   "watchlist-panel",
-  "api-action-panel",
-  "api-response-panel",
-  "api-trend-panel",
 ]);
 // 팀 소유(우리가 건드리면 안 되는) 경로. 변경되면 경고.
 // 구 수집 파이프라인(lib/*-collector.ts, trend-pipeline, trends-service, pipeline-v-he 등)은
 // 통합 스키마 컷오버 때 제거됨 — 백엔드는 db/schema.ts 기준으로 재작성 예정.
+// api-lab·collection-log*는 그 컷오버로 백킹 API가 사라져 함께 제거됨(빌드 복구).
 const PROTECTED = [
-  "app/api-lab",
   "app/api",
   "components",
-  "app/collection-log",
-  "app/collection-log-v-he",
   "db",
 ];
 // 렌더 순수성 스캔에서 제외할 경로(서버 전용/팀 파일 등은 new Date 등이 정당).
