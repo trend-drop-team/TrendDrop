@@ -12,6 +12,33 @@ GitHub Actions → collect.mjs → raw_signals
 
 현재 수집은 매시간, 랭킹은 2시간마다 실행된다. 따라서 평가는 최종 키워드가 마음에 드는지를 보는 것이 아니라 각 실행이 예정된 시간에 수행됐고, 소스 결과가 유실 없이 다음 단계로 전달됐는지를 확인해야 한다.
 
+## 현재 기준선 측정 결과
+
+2026-09-09 현재 Neon 데이터를 기준으로 실제 집계한 결과는 다음과 같다.
+
+| 범위 | 결과 | 1차 판정 |
+|---|---:|---|
+| 최근 24시간 원문 버킷 | 6개 / 기대 6개 | 통과 |
+| 최근 24시간 raw_signals | 1,065건 | 참고 기준선 |
+| 최근 24시간 collect | 성공 2, partial 4 | 경고 |
+| 최근 24시간 popular | 성공 5, 실패 0 | 통과 |
+| 최근 7일 collect | 44회 기록 | 예정 168회 대비 미달 가능성 |
+| 최근 7일 collect | 성공 22회, partial 22회 | 부분 성공률 50% |
+| 최근 7일 popular | 성공 36회, 실패 0회 | 통과 |
+| 전체 raw_signals | 56,603건 / 290버킷 | 장기 보존 기준선 |
+
+따라서 현재 파이프라인의 1차 판정은 `부분 정상`이다. 랭킹 단계와 최근 24시간 버킷은 정상적으로 보이지만, 수집 단계의 partial 비율이 높고 최근 7일 실행 기록이 시간당 스케줄 기대치와 일치하지 않는다. 이 문서의 기준을 적용하려면 먼저 partial의 소스별 원인과 실행 누락 여부를 분리해 확인해야 한다.
+
+이 수치는 문서 작성 시점의 스냅샷이며, 아래 재현 절차로 다시 계산해야 한다.
+
+```text
+1. collection_runs에서 최근 7일 collect/popular 실행을 조회한다.
+2. status별 개수와 시간 간격을 계산한다.
+3. raw_signals에서 최근 24시간 distinct bucket_at을 계산한다.
+4. collection_runs.api_call_log를 source별로 펼쳐 success/empty/error를 계산한다.
+5. raw_signal_count와 실제 raw_signals 저장 건수를 비교한다.
+```
+
 ## 핵심 지표
 
 ### 실행 완전성
@@ -101,6 +128,12 @@ LLM 캐시 적중률은 기준선을 만든 뒤 20%p 이상 급락하면 후보 
 
 ## 반영 순서
 
-현재 `collection_runs`의 `status`, `raw_signal_count`, `keyword_count`, `api_call_log`, `buckets`, `filtered`로 먼저 일일 리포트를 만든다. 이후 `duration_ms`, `expected_sources`, `source_volume_ratio`, `freshness_status`, `persisted_count`, `error_class`를 추가하면 위 지표를 자동화할 수 있다.
+1. `collection_runs`와 `raw_signals`를 집계하는 read-only 점검 스크립트를 만든다.
+2. 최근 24시간·7일의 실행률, 버킷 완전성, 소스별 수집량, 저장률을 매일 출력한다.
+3. `api_call_log`를 source별로 펼쳐 partial 원인을 `empty`, `error`, `disabled`로 구분한다.
+4. `duration_ms`, `expected_sources`, `source_volume_ratio`, `freshness_status`, `persisted_count`, `error_class`를 실행 로그에 추가한다.
+5. 기준 미달이면 GitHub Actions가 실패하거나 알림을 남기도록 연결한다.
+
+현재 `collection_runs`의 `status`, `raw_signal_count`, `keyword_count`, `api_call_log`, `buckets`, `filtered`만으로도 1~3단계의 기본 리포트를 만들 수 있다. 이후 컬럼을 추가하면 위 지표를 실행 시점에 자동화할 수 있다.
 
 이 기준은 키워드의 내용 품질을 판정하지 않는다. 파이프라인이 신뢰할 수 있는 원문을 제시간에 빠짐없이 저장하고, 같은 입력에서 같은 결과를 재현하는지를 평가하는 데 목적이 있다.
