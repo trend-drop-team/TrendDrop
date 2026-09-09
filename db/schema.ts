@@ -117,6 +117,8 @@ export const trendSnapshots = pgTable("trend_snapshots", {
   velocity: varchar("velocity", { length: 32 }),
   // 창(window) 안 언급 횟수(raw count) — growthRate 같은 표시값의 근거 원본.
   mentions: integer("mentions"),
+  risingScore: integer("rising_score"),
+  baselineMentions: integer("baseline_mentions"),
   summary: text("summary"),
   // [{ source, text, sample?, weight? }] — sample: 근거 원문 인용, weight: 소스별 기여 점수.
   // 단일 source_id FK를 두지 않는 이유: 한 키워드가 여러 소스에서 동시에 잡히는 게 정상이라

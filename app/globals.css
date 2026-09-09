@@ -2928,3 +2928,19 @@ body {
     animation: none;
   }
 }
+.rank-keyword-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.rank-rising-badge {
+  color: #07130d;
+  background: var(--accent);
+  border-radius: 999px;
+  padding: 0.12rem 0.38rem;
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  line-height: 1.2;
+}
