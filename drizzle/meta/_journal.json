@@ -8,6 +8,13 @@
       "when": 1786461168776,
       "tag": "0000_certain_tattoo",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1788998621950,
+      "tag": "0001_add_rising_score",
+      "breakpoints": true
     }
   ]
 }
