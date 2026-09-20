@@ -4,7 +4,7 @@ import express, { type NextFunction, type Request, type Response } from "express
 import { getCategories } from "@/server/services/category.service";
 import { getHeatmap } from "@/server/services/heatmap.service";
 import { getKeywordDetail, getKeywordHistory } from "@/server/services/keyword.service";
-import { getTrends } from "@/server/services/trend.service";
+import { getTimeline, getTrends } from "@/server/services/trend.service";
 import { parseLimit, parsePeriod, parseRunId, parseWindowHours } from "@/server/http/query";
 
 const app = express();
@@ -29,6 +29,13 @@ app.get("/api/trends", async (request, response, next) => {
       limit: parseLimit(typeof limit === "string" ? limit : null),
       runId: parseRunId(typeof runId === "string" ? runId : null),
     }));
+  } catch (error) { next(error); }
+});
+
+app.get("/api/trends/timeline", async (request, response, next) => {
+  try {
+    const value = request.query.limit;
+    response.json(await getTimeline(parseLimit(typeof value === "string" ? value : null)));
   } catch (error) { next(error); }
 });
 
