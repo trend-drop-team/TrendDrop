@@ -21,7 +21,7 @@ TrendDrop MVP에서 외부 트렌드 후보를 수집하는 데 필요한 Google
 
 ```env
 DATABASE_URL=
-NEXT_PUBLIC_APP_URL=http://localhost:3000
+NEXT_PUBLIC_API_URL=http://localhost:4000
 YOUTUBE_API_KEY=
 ```
 
