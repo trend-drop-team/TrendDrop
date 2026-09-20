@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: trenddrop-api
+    runtime: node
+    plan: free
+    buildCommand: npm ci
+    startCommand: npm run start:backend
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: 20
+      - key: FRONTEND_ORIGIN
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: YOUTUBE_API_KEY
+        sync: false

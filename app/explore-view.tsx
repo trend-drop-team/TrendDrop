@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
 import { PENDING_CATEGORY_KEY } from "@/app/command-palette";
+import { apiUrl } from "@/lib/api-url";
 import type { HistoryPoint } from "@/types/api/keyword";
 
 type Column = { clock: string; label: string; isLatest: boolean };
@@ -23,7 +24,7 @@ function useKeywordHistory(slug: string, windowHours: number): HistoryPoint[] {
 
     const controller = new AbortController();
 
-    fetch(`/api/keywords/${encodeURIComponent(slug)}/history?window=${windowHours}h`, {
+    fetch(apiUrl(`/api/keywords/${encodeURIComponent(slug)}/history?window=${windowHours}h`), {
       signal: controller.signal,
     })
       .then((response) => (response.ok ? response.json() : Promise.reject(response.status)))
