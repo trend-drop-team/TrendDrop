@@ -11,7 +11,8 @@
     "db:migrate": "node --env-file=.env.local node_modules/drizzle-kit/bin.cjs migrate --config=drizzle.config.mjs",
     "collect": "node --env-file=.env.local pipeline/collect.mjs",
     "rank": "node --env-file=.env.local pipeline/rank-popular.mjs --save",
-    "verify:ui": "node scripts/verify-ui.mjs"
+    "verify:ui": "node scripts/verify-ui.mjs",
+    "verify:migrations": "node scripts/verify-migrations.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.115.0",
