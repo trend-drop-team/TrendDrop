@@ -3,7 +3,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "dev:backend": "tsx backend/server.ts",
+    "dev:backend": "NODE_ENV=development tsx backend/server.ts",
     "start:backend": "tsx backend/server.ts",
     "build": "next build",
     "start": "next start",
