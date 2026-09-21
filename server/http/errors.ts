@@ -4,11 +4,10 @@
  */
 import { NextResponse } from "next/server";
 
-/**
- * 404로 내려야 하는 조회 실패.
- * "대상이 없다"는 정상적인 답이므로 mock 폴백 대상이 아니다 — `fromDbOrMock`이 그대로 던진다.
- */
-export class NotFoundError extends Error {}
+import { NotFoundError } from "./not-found";
+
+// NotFoundError는 next/server에 묶이지 않도록 별도 모듈에 있다(Express 백엔드가 같이 쓴다).
+export { NotFoundError } from "./not-found";
 
 export function errorResponse(message: string, status: number, detail?: string) {
   return NextResponse.json(detail ? { error: message, detail } : { error: message }, { status });

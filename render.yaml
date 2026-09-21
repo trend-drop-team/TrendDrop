@@ -9,6 +9,10 @@ services:
     envVars:
       - key: NODE_VERSION
         value: 20
+      # Render는 Node 런타임에 NODE_ENV를 자동으로 넣지 않는다.
+      # 이 값이 없으면 FRONTEND_ORIGIN 필수 가드가 조용히 꺼진다(= CORS 전체 허용).
+      - key: NODE_ENV
+        value: production
       - key: FRONTEND_ORIGIN
         sync: false
       - key: DATABASE_URL
