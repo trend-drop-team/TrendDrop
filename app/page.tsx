@@ -9,7 +9,8 @@ import type { TimelineSnapshot, TrendRow } from "@/types/api/trend";
 const WATCH_FROM_RANK = 10;
 const WATCH_LIMIT = 4;
 
-// 수집 run이 계속 쌓이므로 홈은 매 요청마다 새로 그린다.
+// 수집 run이 계속 쌓이므로 페이지 자체는 매 요청 렌더한다(빌드 타임 프리렌더 금지 —
+// 프리렌더로 돌리면 빌드가 백엔드 가동 여부에 묶인다). 데이터 캐시는 fetchApi가 맡는다.
 export const dynamic = "force-dynamic";
 
 export default async function HomePage() {
