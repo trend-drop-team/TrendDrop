@@ -71,6 +71,22 @@ export async function fetchApi<T>(path: string, options: FetchOptions = {}): Pro
   return response.json() as Promise<T>;
 }
 
+/**
+ * 실패해도 화면을 죽이면 안 되는 조회용.
+ *
+ * 루트 레이아웃처럼 "없어도 본문은 보여야 하는" 자리에서 쓴다. 부가 기능(커맨드 팔레트
+ * 검색 목록 등) 하나 때문에 모든 페이지가 500으로 떨어지는 걸 막는다.
+ * 본문 데이터에는 쓰지 말 것 — 빈 화면을 정상인 척 보여주게 된다.
+ */
+export async function fetchApiOr<T>(path: string, fallback: T, options: FetchOptions = {}): Promise<T> {
+  try {
+    return await fetchApi<T>(path, options);
+  } catch (error) {
+    console.error(`[api] optional fetch failed, falling back (${path}):`, error);
+    return fallback;
+  }
+}
+
 /** 에러 응답 body의 `{ error }`를 꺼낸다. JSON이 아니면 상태 코드 문구로 대신한다. */
 async function readErrorMessage(response: Response): Promise<string | null> {
   try {

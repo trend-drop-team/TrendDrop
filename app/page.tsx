@@ -24,6 +24,31 @@ export default async function HomePage() {
   const snapshots = timelineResult.data;
   const latest = snapshots.at(-1);
 
+  // 스냅샷이 하나도 없으면 랭킹 보드를 그리지 않는다.
+  // RankingBoard는 snapshots[index].rows / .ticker / .clock / .label을 가드 없이 읽어서,
+  // 빈 배열이 들어오면 "Cannot read properties of undefined (reading 'rows')"로 홈이 통째로 죽는다.
+  // 수집 run이 아직 없는 새 배포나 파이프라인 첫 실행 전에 실제로 일어난다.
+  if (snapshots.length === 0) {
+    return (
+      <div className="page-shell">
+        <main className="app-main">
+          <Onboarding categories={categories} />
+          <section className="panel">
+            <div className="panel-heading">
+              <div>
+                <p className="section-kicker">RANKING</p>
+                <h3>아직 집계된 트렌드가 없습니다</h3>
+              </div>
+            </div>
+            <div className="empty-state-box">
+              <p>첫 수집이 끝나면 순위가 표시됩니다.</p>
+            </div>
+          </section>
+        </main>
+      </div>
+    );
+  }
+
   // 워치리스트 API(3.6)는 로그인한 user_id가 있어야 하므로, 로그인이 붙기 전까지
   // 이 패널은 "상위권 바로 아래에서 올라오는 키워드"를 최신 run에서 뽑아 보여준다.
   const upcoming = (latest?.rows ?? [])
