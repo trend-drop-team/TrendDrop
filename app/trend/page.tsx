@@ -1,6 +1,8 @@
 import { notFound, redirect } from "next/navigation";
 
-import { getTrends } from "@/server/services/trend.service";
+import { fetchApi } from "@/lib/api-client";
+import type { ApiResult } from "@/types/api/common";
+import type { TrendRow } from "@/types/api/trend";
 
 export const dynamic = "force-dynamic";
 
@@ -9,7 +11,7 @@ export const dynamic = "force-dynamic";
  * 상세 화면 자체는 `/trend/[slug]`가 담당한다.
  */
 export default async function TrendIndexPage() {
-  const { data } = await getTrends({ limit: 1 });
+  const { data } = await fetchApi<ApiResult<TrendRow[]>>("/api/trends?limit=1");
   const top = data[0];
 
   if (!top) notFound();

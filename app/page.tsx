@@ -1,7 +1,9 @@
 import Onboarding from "@/app/onboarding";
 import RankingBoard from "@/app/ranking-board";
-import { getCategories } from "@/server/services/category.service";
-import { getTimeline, getTrends } from "@/server/services/trend.service";
+import { fetchApi } from "@/lib/api-client";
+import type { ApiResult } from "@/types/api/common";
+import type { CategoryRow } from "@/types/api/category";
+import type { TimelineSnapshot, TrendRow } from "@/types/api/trend";
 
 /** 랭킹 밖에서 올라오고 있는 "예비" 키워드로 볼 상위 컷. */
 const WATCH_FROM_RANK = 10;
@@ -12,9 +14,9 @@ export const dynamic = "force-dynamic";
 
 export default async function HomePage() {
   const [categoryResult, timelineResult, dailyResult] = await Promise.all([
-    getCategories(),
-    getTimeline(),
-    getTrends({ period: "daily" }),
+    fetchApi<ApiResult<CategoryRow[]>>("/api/categories"),
+    fetchApi<ApiResult<TimelineSnapshot[]>>("/api/trends/timeline"),
+    fetchApi<ApiResult<TrendRow[]>>("/api/trends?period=daily"),
   ]);
 
   const categories = categoryResult.data.map((category) => category.name);

@@ -1,6 +1,8 @@
 import ExploreView from "@/app/explore-view";
-import { getHeatmap } from "@/server/services/heatmap.service";
-import { getTimeline } from "@/server/services/trend.service";
+import { fetchApi } from "@/lib/api-client";
+import type { ApiResult } from "@/types/api/common";
+import type { HeatmapPayload } from "@/types/api/heatmap";
+import type { TimelineSnapshot } from "@/types/api/trend";
 
 /** 히트맵 가로축·A/B 비교 차트가 함께 보는 구간. */
 const WINDOW_HOURS = 12;
@@ -9,8 +11,8 @@ export const dynamic = "force-dynamic";
 
 export default async function ExplorePage() {
   const [heatmapResult, timelineResult] = await Promise.all([
-    getHeatmap(WINDOW_HOURS),
-    getTimeline(),
+    fetchApi<ApiResult<HeatmapPayload>>(`/api/explore/heatmap?window=${WINDOW_HOURS}h`),
+    fetchApi<ApiResult<TimelineSnapshot[]>>("/api/trends/timeline"),
   ]);
 
   const { columns, categories, matrix } = heatmapResult.data;

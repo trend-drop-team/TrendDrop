@@ -1,8 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-import { NotFoundError } from "@/server/http/errors";
-import { getKeywordDetail } from "@/server/services/keyword.service";
+import { fetchApi } from "@/lib/api-client";
 import type { KeywordDetail } from "@/types/api/keyword";
 
 import SourceCard from "../source-card";
@@ -152,11 +151,13 @@ export default async function TrendDetailPage({ params }: { params: Promise<{ sl
   let source: "db" | "mock";
 
   try {
-    const result = await getKeywordDetail(decodeURIComponent(slug));
+    const result = await fetchApi<{ data: KeywordDetail; meta: { source: "db" | "mock" } }>(
+      `/api/keywords/${encodeURIComponent(slug)}`,
+    );
     detail = result.data;
     source = result.meta.source;
   } catch (error) {
-    if (error instanceof NotFoundError) notFound();
+    if (error instanceof Error && error.name === "NotFoundError") notFound();
     throw error;
   }
 
