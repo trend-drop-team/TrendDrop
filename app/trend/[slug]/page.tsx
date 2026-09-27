@@ -1,14 +1,61 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-import { fetchApi } from "@/lib/api-client";
+import ShareButton from "@/app/share-button";
+import ShareCardButton from "@/app/share-card-button";
+import { SITE_NAME } from "@/lib/site";
 import type { KeywordDetail } from "@/types/api/keyword";
 
 import SourceCard from "../source-card";
 import StreamingSummary from "../streaming-summary";
 import "../trend.css";
+import { fetchKeywordDetail } from "./detail";
 
 export const dynamic = "force-dynamic";
+
+/** 카톡·슬랙 미리보기는 두 줄쯤에서 잘린다 — 순위/상승률 같은 사실을 앞에 둔다. */
+function shareDescription(detail: KeywordDetail): string {
+  const facts = `${detail.category} · 검색 상승률 ${detail.growth} · 트렌드 점수 ${detail.score}/100`;
+  const summary = detail.summary.trim();
+  if (!summary) return facts;
+
+  const chars = [...summary];
+  const brief = chars.length <= 70 ? summary : `${chars.slice(0, 69).join("")}…`;
+  return `${facts} — ${brief}`;
+}
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}): Promise<Metadata> {
+  const { slug } = await params;
+
+  let detail: KeywordDetail;
+  try {
+    detail = (await fetchKeywordDetail(slug)).detail;
+  } catch (error) {
+    // 없는 키워드면 본문과 같은 판정을 메타데이터 단계에서도 내린다 —
+    // 404 화면에 엉뚱한 제목·og 태그가 붙는 걸 막기 위해서다.
+    // (상태 코드는 이걸로도 200으로 나간다. master부터 있던 soft 404는 별도 문제.)
+    if (error instanceof Error && error.name === "NotFoundError") notFound();
+    // 백엔드 장애는 404가 아니다 — 그대로 올려 에러로 처리한다.
+    throw error;
+  }
+
+  const title = `${detail.keyword} · ${detail.rank}위`;
+  const description = shareDescription(detail);
+  const url = `/trend/${encodeURIComponent(detail.slug)}`;
+
+  return {
+    title,
+    description,
+    // og:title에는 title.template이 적용되지 않아 서비스명을 직접 붙인다.
+    openGraph: { type: "article", title: `${title} · ${SITE_NAME}`, description, url },
+    twitter: { card: "summary_large_image", title: `${title} · ${SITE_NAME}`, description },
+  };
+}
 
 function platformGlyph(platform: string): string {
   switch (platform) {
@@ -151,11 +198,10 @@ export default async function TrendDetailPage({ params }: { params: Promise<{ sl
   let source: "db" | "mock";
 
   try {
-    const result = await fetchApi<{ data: KeywordDetail; meta: { source: "db" | "mock" } }>(
-      `/api/keywords/${encodeURIComponent(slug)}`,
-    );
-    detail = result.data;
-    source = result.meta.source;
+    // generateMetadata가 이미 부른 요청과 같은 것 — react cache가 한 번으로 합친다.
+    const result = await fetchKeywordDetail(slug);
+    detail = result.detail;
+    source = result.source;
   } catch (error) {
     if (error instanceof Error && error.name === "NotFoundError") notFound();
     throw error;
@@ -170,6 +216,19 @@ export default async function TrendDetailPage({ params }: { params: Promise<{ sl
           </Link>
           <span className="td-rank">#{detail.rank}</span>
           <span className="td-tag">{detail.category}</span>
+          <div className="share-actions">
+            <ShareButton
+              path={`/trend/${encodeURIComponent(detail.slug)}`}
+              title={`${detail.keyword} · ${detail.rank}위`}
+              text={`${detail.keyword} 지금 ${detail.rank}위 (${detail.growth})`}
+            />
+            <ShareCardButton
+              cardPath={`/share-card?slug=${encodeURIComponent(detail.slug)}`}
+              fileName={`trenddrop-${detail.slug}`}
+              title={`${detail.keyword} · ${detail.rank}위`}
+              text={`${detail.keyword} 지금 ${detail.rank}위 (${detail.growth})`}
+            />
+          </div>
         </div>
 
         <section className="td-hero">
