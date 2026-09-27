@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
 
+import { fetchApiOr } from "@/lib/api-client";
 import { getDocList } from "@/lib/docs";
-import { getCategories } from "@/server/services/category.service";
-import { getTrends } from "@/server/services/trend.service";
+import type { CategoryRow } from "@/types/api/category";
+import type { TrendRow } from "@/types/api/trend";
 
 import AppNav from "./app-nav";
 import CommandPalette from "./command-palette";
@@ -29,7 +30,15 @@ export default async function RootLayout({
   }));
 
   // 커맨드 팔레트는 모든 화면에 떠 있으므로 검색 대상도 여기서 한 번만 받아 내려준다.
-  const [categoryResult, trendResult] = await Promise.all([getCategories(), getTrends()]);
+  //
+  // 실패해도 던지지 않는다(fetchApiOr). 루트 레이아웃에서 난 에러는 app/error.tsx가 잡지 못하고
+  // global-error.tsx까지 올라가, 부가 기능인 ⌘K 검색 목록 하나 때문에 모든 페이지가 통째로
+  // 에러 화면이 된다. 목록이 비면 팔레트만 조용히 비고 본문은 그대로 보인다.
+  const [categoryResult, trendResult] = await Promise.all([
+    // 여기서 읽는 건 data뿐이라 meta까지 요구하는 ApiResult 대신 좁게 받는다(폴백에 가짜 meta를 지어내지 않도록).
+    fetchApiOr<{ data: CategoryRow[] }>("/api/categories", { data: [] }),
+    fetchApiOr<{ data: TrendRow[] }>("/api/trends", { data: [] }),
+  ]);
 
   const categories = categoryResult.data.map((category) => category.name);
   const paletteKeywords = trendResult.data.map((row) => ({
