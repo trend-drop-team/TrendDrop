@@ -1315,6 +1315,20 @@ h3 {
   opacity: 0.5;
 }
 
+/* 마지막 수집이 STALE_THRESHOLD_MS 이상 지났을 때(이슈 #48) — 눈에 띄되 과하지 않게 */
+.board-stale-warning {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 6px 0 0;
+  padding: 5px 11px;
+  border-radius: 999px;
+  background: rgba(217, 119, 6, 0.14);
+  color: #d97706;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
 /* LIVE 토글 — 켜져 있으면 dot이 펄스한다 */
 .live-toggle {
   display: inline-flex;

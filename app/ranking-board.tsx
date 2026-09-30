@@ -6,6 +6,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { CATEGORY_EVENT, PENDING_CATEGORY_KEY } from "@/app/command-palette";
 import { INTERESTS_EVENT, INTERESTS_KEY } from "@/app/onboarding";
 import RollingNumber from "@/app/rolling-number";
+import { isStale, relativeTime } from "@/lib/utils/date";
 import { getRankDelta } from "@/lib/utils/rank";
 import type { TimelineSnapshot, TrendRow } from "@/types/api/trend";
 
@@ -21,7 +22,12 @@ type Props = {
   snapshots: TimelineSnapshot[];
   daily: TrendRow[];
   categories: string[];
+  /** 최신 run이 실제로 수집된 시각(ISO). 신선도 표시("마지막 수집 N분 전")에 쓴다. */
+  latestCollectedAt: string | null;
 };
+
+/** 신선도 표시용 "지금" 갱신 주기 — 라벨이 화면에 고정되지 않도록 주기적으로 다시 계산한다. */
+const NOW_TICK_MS = 30_000;
 
 const PERIODS: { id: Period; label: string }[] = [
   { id: "realtime", label: "실시간" },
@@ -152,7 +158,7 @@ function DeltaBadge({ item }: { item: Row }) {
   );
 }
 
-export default function RankingBoard({ snapshots, daily, categories }: Props) {
+export default function RankingBoard({ snapshots, daily, categories, latestCollectedAt }: Props) {
   const latestIndex = snapshots.length - 1;
 
   const [period, setPeriod] = useState<Period>("realtime");
@@ -161,6 +167,8 @@ export default function RankingBoard({ snapshots, daily, categories }: Props) {
   const [live, setLive] = useState(true);
   const [playing, setPlaying] = useState(false);
   const [pull, setPull] = useState(0);
+  // 서버 렌더 시점에 고정되지 않도록, 신선도 라벨이 참조하는 "지금"을 주기적으로 다시 잰다.
+  const [now, setNow] = useState<Date | null>(null);
   // 마운트 후 localStorage에서 채워지는 값들 — SSR 초기값은 비어 있어 하이드레이션 안전.
   const [saved, setSaved] = useState<string[]>([]);
   const [interests, setInterests] = useState<string[]>([]);
@@ -179,6 +187,11 @@ export default function RankingBoard({ snapshots, daily, categories }: Props) {
   const snapshot = snapshots[snapshotIndex];
 
   const rows: Row[] = isRealtime ? snapshot.rows : daily;
+
+  // 마지막 수집이 실제로 언제였는지 — now가 아직 없으면(서버 렌더 직후) 표시를 비워 하이드레이션 불일치를 피한다.
+  const collectedAt = latestCollectedAt ? new Date(latestCollectedAt) : null; // verify-ui-allow — 고정 ISO 문자열 파싱, 서버·클라 동일
+  const freshnessLabel = collectedAt && now ? relativeTime(collectedAt, now) : null;
+  const dataStale = collectedAt && now ? isStale(collectedAt, now) : false;
 
   // 프리뷰의 "왜 뜨나" 한 줄 — 행 자체에 reason이 비어 있을 때 24시간 집계 쪽 문구로 메운다.
   const reasonByKeyword = useMemo(
@@ -221,6 +234,16 @@ export default function RankingBoard({ snapshots, daily, categories }: Props) {
   const advance = useCallback(() => {
     setSnapshotIndex((index) => (index + 1) % snapshots.length);
   }, [snapshots.length]);
+
+  /* --- 신선도 라벨이 참조하는 "지금"을 주기적으로 다시 잰다 (마운트 후에만 — SSR과 다른 값이라 하이드레이션엔 비워 둔다) --- */
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => setNow(new Date())); // verify-ui-allow — effect 콜백, 렌더 중 호출 아님
+    const timer = window.setInterval(() => setNow(new Date()), NOW_TICK_MS); // verify-ui-allow — effect 콜백, 렌더 중 호출 아님
+    return () => {
+      cancelAnimationFrame(frame);
+      window.clearInterval(timer);
+    };
+  }, []);
 
   /* --- LIVE 자동 갱신 (시간 진행은 오직 여기서만 일어난다) --- */
   /* 프리뷰가 열려 있는 동안(=행 호버 중)엔 자동 진행을 멈춘다 — 행이 밑으로 사라지며 프리뷰가 붕 뜨는 것 방지. */
@@ -533,10 +556,10 @@ export default function RankingBoard({ snapshots, daily, categories }: Props) {
             aria-pressed={live && isRealtime}
             onClick={handleLiveToggle}
             disabled={!isRealtime}
-            title={isRealtime ? "실시간 갱신 켜기/끄기" : "24시간 집계는 자동 갱신을 쓰지 않습니다"}
+            title={isRealtime ? "자동 재생 켜기/끄기" : "24시간 집계는 자동 재생을 쓰지 않습니다"}
           >
             <span className="live-dot" aria-hidden="true" />
-            LIVE
+            자동 재생
           </button>
         </div>
 
@@ -551,12 +574,33 @@ export default function RankingBoard({ snapshots, daily, categories }: Props) {
               <span className="board-sep" aria-hidden="true">
                 ·
               </span>
-              {live ? "방금 갱신" : playing ? "과거 재생 중" : "일시정지"}
+              {freshnessLabel ? `마지막 수집 ${freshnessLabel}` : "수집 시각 확인 중"}
+              <span className="board-sep" aria-hidden="true">
+                ·
+              </span>
+              {playing ? "과거 재생 중" : live ? "자동 재생 중" : "일시정지"}
             </>
           ) : (
-            "24시간 누적 집계"
+            <>
+              24시간 누적 집계
+              {freshnessLabel && (
+                <>
+                  <span className="board-sep" aria-hidden="true">
+                    ·
+                  </span>
+                  {`마지막 수집 ${freshnessLabel}`}
+                </>
+              )}
+            </>
           )}
         </p>
+
+        {dataStale && (
+          <p className="board-stale-warning" role="status">
+            <span aria-hidden="true">⚠</span> 최신 데이터가 {freshnessLabel} 수집된 것이라, 지금과 다를 수
+            있어요.
+          </p>
+        )}
 
         {isRealtime && live && (
           // key로 매 스냅샷마다 진행 바 애니메이션을 다시 시작시킨다.
