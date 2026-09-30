@@ -19,3 +19,13 @@ services:
         sync: false
       - key: YOUTUBE_API_KEY
         sync: false
+      - key: AUTH_SESSION_SECRET
+        sync: false
+      - key: KAKAO_CLIENT_ID
+        sync: false
+      - key: KAKAO_CLIENT_SECRET
+        sync: false
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false

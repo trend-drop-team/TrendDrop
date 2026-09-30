@@ -1,25 +1,59 @@
-/**
- * 요청자의 user_id.
- *
- * 세션·토큰 발급은 스펙 범위 밖(unified-schema-api-spec.md 3.6절 비고)이라 아직 없다.
- * 그때까지의 임시 경계로 `x-user-id` 헤더 또는 `td-user` 쿠키의 숫자 id를 읽고,
- * 없으면 401로 막는다. 로그인이 붙으면 이 함수 하나만 세션 조회로 바꾸면 된다.
- *
- * TODO(auth): 서명된 세션으로 교체 — 지금 값은 클라이언트가 마음대로 바꿀 수 있다.
- */
-export function getUserId(request: Request): number | null {
-  const header = request.headers.get("x-user-id");
+import { createHmac, timingSafeEqual } from "node:crypto";
+import type { Request as ExpressRequest } from "express";
+
+const SESSION_MAX_AGE = 60 * 60 * 24 * 30;
+
+function sessionSecret() {
+  return process.env.AUTH_SESSION_SECRET || (process.env.NODE_ENV === "development" ? "local-development-secret" : null);
+}
+
+function sign(value: string) {
+  const secret = sessionSecret();
+  if (!secret) return null;
+  return createHmac("sha256", secret).update(value).digest("base64url");
+}
+
+export function createSession(userId: number) {
+  const payload = `${userId}.${Math.floor(Date.now() / 1000) + SESSION_MAX_AGE}`;
+  const signature = sign(payload);
+  if (!signature) throw new Error("AUTH_SESSION_SECRET is not configured");
+  return `${payload}.${signature}`;
+}
+
+function verifySession(value: string): number | null {
+  const [userId, expiresAt, signature] = value.split(".");
+  if (!userId || !expiresAt || !signature || Number(expiresAt) < Date.now() / 1000) return null;
+  const payload = `${userId}.${expiresAt}`;
+  const expected = sign(payload);
+  if (!expected || expected.length !== signature.length) return null;
+  if (!timingSafeEqual(Buffer.from(expected), Buffer.from(signature))) return null;
+  const parsed = Number(userId);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+}
+
+type AuthRequest = Request | ExpressRequest;
+
+function headerValue(request: AuthRequest, name: string) {
+  if (typeof request.headers.get === "function") return request.headers.get(name);
+  return (request.headers as ExpressRequest["headers"])[name];
+}
+
+function readCookie(request: AuthRequest, name: string) {
+  const raw = headerValue(request, "cookie");
+  const value = Array.isArray(raw) ? raw.join("; ") : raw ?? "";
+  return new RegExp(`(?:^|;\\s*)${name}=([^;]+)`).exec(value)?.[1] ?? null;
+}
+
+export function getUserId(request: AuthRequest): number | null {
+  const rawHeader = headerValue(request, "x-user-id");
+  const header = Array.isArray(rawHeader) ? rawHeader[0] : rawHeader;
   if (header) {
     const value = Number.parseInt(header, 10);
     if (Number.isFinite(value) && value > 0) return value;
   }
 
-  const cookie = request.headers.get("cookie");
-  if (!cookie) return null;
-
-  const match = /(?:^|;\s*)td-user=(\d+)/.exec(cookie);
-  if (!match) return null;
-
-  const value = Number.parseInt(match[1], 10);
-  return Number.isFinite(value) && value > 0 ? value : null;
+  const session = readCookie(request, "td-session");
+  return session ? verifySession(session) : null;
 }
+
+export { SESSION_MAX_AGE };
