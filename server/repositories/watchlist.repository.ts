@@ -8,7 +8,7 @@ import {
   trendSnapshots,
   watchlistItems,
 } from "@/db/schema";
-import { NotFoundError } from "@/server/http/errors";
+import { NotFoundError } from "@/server/http/not-found";
 import { RUN_AT } from "@/server/repositories/shared";
 import type { WatchlistRow } from "@/types/api/watchlist";
 

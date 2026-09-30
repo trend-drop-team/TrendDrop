@@ -1,13 +1,15 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-import { fetchApi } from "@/lib/api-client";
+import { ApiNotFoundError, fetchApi } from "@/lib/api-client";
 import type { KeywordDetail } from "@/types/api/keyword";
 
 import SourceCard from "../source-card";
 import StreamingSummary from "../streaming-summary";
 import "../trend.css";
 
+// 빌드 타임 프리렌더 금지 — 프리렌더로 돌리면 빌드가 백엔드 가동 여부에 묶인다.
+// 데이터 캐시는 fetchApi가 맡는다.
 export const dynamic = "force-dynamic";
 
 function platformGlyph(platform: string): string {
@@ -157,7 +159,8 @@ export default async function TrendDetailPage({ params }: { params: Promise<{ sl
     detail = result.data;
     source = result.meta.source;
   } catch (error) {
-    if (error instanceof Error && error.name === "NotFoundError") notFound();
+    // 없는 슬러그는 장애가 아니라 404다 — 에러 바운더리로 새지 않게 여기서 가른다.
+    if (error instanceof ApiNotFoundError) notFound();
     throw error;
   }
 
