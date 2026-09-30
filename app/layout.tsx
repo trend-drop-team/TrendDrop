@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 
 import { getDocList } from "@/lib/docs";
 import { getCategories } from "@/server/services/category.service";
@@ -11,6 +11,13 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "TrendDrop",
   description: "SNS 기반 트렌드 탐색 웹앱 프로토타입",
+};
+
+// viewport-fit=cover가 있어야 globals.css의 safe-area-inset 처리가 iPhone 홈 인디케이터를 피해 동작한다.
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
 };
 
 // 첫 페인트 전에 저장된 테마를 적용해 FOUC(테마 깜빡임)를 막는다.
