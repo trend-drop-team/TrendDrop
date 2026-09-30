@@ -168,6 +168,8 @@ export async function getTimeline(
 ): Promise<ApiResult<TimelineSnapshot[]>> {
   let data: TimelineSnapshot[] | null = null;
   let source: "db" | "mock" = isDbConfigured() ? "db" : "mock";
+  // 실제 마지막 수집 시각(신선도 표시용) — 타임라인 라벨과 달리 "지금"이 아니라 run 자체의 시각이다.
+  let latestCollectedAt: string | null = null;
 
   if (isDbConfigured()) {
     const ingredients = await dbTimelineIngredients(TIMELINE_RUNS);
@@ -175,15 +177,18 @@ export async function getTimeline(
     // 쿼리 실패가 아니므로 예외를 던지지 않고 여기서 명시적으로 mock으로 넘어간다.
     if (hasData(ingredients)) {
       data = buildTimeline(ingredients.runs, ingredients.rows, rowLimit);
+      latestCollectedAt = ingredients.runs[ingredients.runs.length - 1].at.toISOString();
     }
   }
 
   if (!data) {
     data = mockTimeline();
     source = "mock";
+    // mock은 항상 "방금 만든" 데모 데이터로 취급한다.
+    latestCollectedAt = nowIso();
   }
 
-  return { data, meta: { source, updatedAt: nowIso(), runs: data.length } };
+  return { data, meta: { source, updatedAt: nowIso(), latestCollectedAt, runs: data.length } };
 }
 
 export type TrendQuery = {
@@ -213,23 +218,26 @@ export async function getTrends(query: TrendQuery = {}): Promise<ApiResult<Trend
   if (period === "daily") {
     let value: TrendRow[] | null = null;
     let source: "db" | "mock" = isDbConfigured() ? "db" : "mock";
+    let latestCollectedAt: string | null = null;
 
     if (isDbConfigured()) {
       const ingredients = await dbDailyIngredients();
       if (hasData(ingredients)) {
         value = buildDailyRows(ingredients.runs, ingredients.rows, limit);
+        latestCollectedAt = ingredients.runs[0]?.at.toISOString() ?? null;
       }
     }
 
     if (!value) {
       value = mockDailyRows();
       source = "mock";
+      latestCollectedAt = nowIso();
     }
 
     const rows = filterByCategory(value, query.category).slice(0, limit);
     return {
       data: rows,
-      meta: { source, updatedAt: nowIso(), period, runId: null, ticker: [] },
+      meta: { source, updatedAt: nowIso(), latestCollectedAt, period, runId: null, ticker: [] },
     };
   }
 
@@ -242,7 +250,14 @@ export async function getTrends(query: TrendQuery = {}): Promise<ApiResult<Trend
   if (!snapshot) {
     return {
       data: [],
-      meta: { source: timeline.meta.source, updatedAt: nowIso(), period, runId: null, ticker: [] },
+      meta: {
+        source: timeline.meta.source,
+        updatedAt: nowIso(),
+        latestCollectedAt: timeline.meta.latestCollectedAt,
+        period,
+        runId: null,
+        ticker: [],
+      },
     };
   }
 
@@ -253,6 +268,7 @@ export async function getTrends(query: TrendQuery = {}): Promise<ApiResult<Trend
     meta: {
       source: timeline.meta.source,
       updatedAt: nowIso(),
+      latestCollectedAt: timeline.meta.latestCollectedAt,
       period,
       runId: snapshot.runId,
       ticker: snapshot.ticker,

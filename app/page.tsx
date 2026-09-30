@@ -45,7 +45,12 @@ export default async function HomePage() {
         <StaleCacheWriter cacheKey="home" summary={staleSummary} />
         <Onboarding categories={categories} />
 
-        <RankingBoard snapshots={snapshots} daily={dailyResult.data} categories={categories} />
+        <RankingBoard
+          snapshots={snapshots}
+          daily={dailyResult.data}
+          categories={categories}
+          latestCollectedAt={timelineResult.meta.latestCollectedAt ?? null}
+        />
 
         {upcoming.length > 0 && (
           <section className="panel watchlist-panel">
