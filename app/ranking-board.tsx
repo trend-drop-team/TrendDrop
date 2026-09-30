@@ -343,6 +343,7 @@ export default function RankingBoard({ snapshots, daily, categories, latestColle
   const openPreview = useCallback(
     (keyword: string) => {
       if (playing) return;
+      if (!window.matchMedia("(hover: hover)").matches) return;
       if (hoverTimer.current) window.clearTimeout(hoverTimer.current);
       hoverTimer.current = window.setTimeout(() => setHovered(keyword), PREVIEW_DELAY_MS);
     },
