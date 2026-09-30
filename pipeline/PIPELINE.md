@@ -9,9 +9,10 @@
 ## 0. 전체 흐름
 
 **수집과 랭킹은 이제 서로 다른 주기로 따로 돈다.** GitHub Actions 워크플로가 각각 하나씩이다.
+**두 워크플로의 시계는 GitHub 밖(cron-job.org)에 있다** — 이유는 8-3.
 
 ```
-collect.yml — 매시 :05  (cron "5 * * * *")
+collect.yml — 매시 :05  (cron-job.org → workflow_dispatch)
     │
     └─▶ collect.mjs ─────────────────────────────────────────
           collection_runs 1행 생성 (pipeline='collect')
@@ -19,7 +20,7 @@ collect.yml — 매시 :05  (cron "5 * * * *")
           raw_signals에 N행 INSERT (run_id = 방금 만든 run)
           collection_runs 그 행 UPDATE (status/raw_signal_count)
 
-rank.yml — 2시간마다 :20  (cron "20 */2 * * *")
+rank.yml — 2시간마다 :20  (cron-job.org → workflow_dispatch)
     │
     └─▶ rank-popular.mjs --save ─────────────────────────────
           최근 6시간 raw_signals 읽기 (SELECT만)
@@ -426,9 +427,62 @@ npm run db:migrate    # 4) → 안 돌린 것만 DB에 적용 + __drizzle_migrat
 ### 8-3. GitHub Actions
 
 ```
-.github/workflows/collect.yml   cron "5 * * * *"      매시간
-.github/workflows/rank.yml      cron "20 */2 * * *"   2시간마다
+.github/workflows/collect.yml   매시간 :05      ← cron-job.org가 호출
+.github/workflows/rank.yml      2시간마다 :20   ← cron-job.org가 호출
 ```
+
+**시계는 GitHub 밖에 있다.** 두 워크플로 모두 트리거가 `workflow_dispatch` 하나뿐이고,
+외부 스케줄러(cron-job.org)가 정해진 시각에 dispatch API를 호출해서 실행한다.
+수집 자체는 예전과 똑같이 GitHub Actions 러너에서 돈다 — 방아쇠만 밖으로 나갔다.
+
+```
+cron-job.org ──POST dispatches API──> GitHub Actions ──> node pipeline/collect.mjs
+```
+
+**왜 GitHub `schedule:`을 버렸나 (2026-09-30 실측)**
+
+| 워크플로 | 걸어둔 cron | 기대 | 실제 | 이행률 |
+| -------- | ------------- | --------- | -------------- | ------ |
+| collect  | `5 * * * *`   | 24회/일 | **5.75회/일** | 24% |
+| rank     | `20 */2 * * *`| 12회/일 | **5.31회/일** | 44% |
+
+주기를 2배 다르게 써놨는데 실제 실행 횟수는 둘 다 하루 5회대로 같았다 —
+**cron 식을 뭐라고 쓰든 이 레포엔 하루 5~6번만 떨어진다.** 35일간 실패 0회,
+실행시간 중앙값 0.7분, 큐 대기 0분이라 우리 쪽 문제가 아니다. GitHub의 `schedule`은
+best-effort라 혼잡하면 지연되고 **밀린 회차는 소급 없이 버려진다**(정각 부근이 최대 혼잡).
+실행 간격은 중앙값 4.1h, 최대 13.1h까지 벌어졌고, 그 결과 `raw_signals`의
+1시간 버킷이 14일 기준 **76/336(23%)**만 찼다. collect은 거른 시간대를 복구할 수
+없으므로(0장) 이건 비가역 손실이다.
+
+`workflow_dispatch`는 사람이 "Run workflow" 버튼을 누른 것과 같은 취급이라
+혼잡 큐에 서지 않고 즉시 실행된다.
+
+**예비로 `schedule:`을 남기지 않았다.** 남기면 주 트리거가 죽어도 하루 5번은 계속 돌아서
+"절반만 살아있는 상태"를 가린다. 이번 문제를 몇 주 동안 못 보고 지나친 원인이 정확히 그거다.
+트리거가 하나뿐이면 고장 시 실행이 0이 되어 바로 드러난다.
+
+**cron-job.org 설정** (작업 2개)
+
+| 항목    | collect                                                                                     | rank                    |
+| ------- | ------------------------------------------------------------------------------------------- | ----------------------- |
+| URL     | `POST https://api.github.com/repos/trend-drop-team/TrendDrop/actions/workflows/collect.yml/dispatches` | 〃 `rank.yml/dispatches` |
+| 주기    | 매시간 :05                                                                                  | 2시간마다 :20           |
+| Body    | `{"ref":"master"}`                                                                          | 〃                      |
+
+공통 헤더:
+
+```
+Authorization: Bearer <PAT>
+Accept: application/vnd.github+json
+Content-Type: application/json
+```
+
+성공 응답은 **204 No Content**(본문 없음)다. 실패 시 메일 알림을 반드시 켤 것 —
+`schedule:` 예비선을 없앴으므로 이 알림이 유일한 감시 장치다.
+
+**PAT은 fine-grained로 권한을 최소로 준다** — Repository access는 `trend-drop-team/TrendDrop`
+하나만, Permissions는 **Actions: Read and write** 하나만. 유출돼도 할 수 있는 일이
+"우리 워크플로를 실행/취소"뿐이다(push·Secrets 열람·타 레포 접근 전부 불가).
 
 파일 안에 결정 근거를 주석으로 달아뒀다. 주기를 나눈 이유는 0장에 있다.
 
@@ -446,9 +500,9 @@ npm run db:migrate    # 4) → 안 돌린 것만 DB에 적용 + __drizzle_migrat
 
 ① **시간대는 안전하다.** `collect.mjs`의 `hourBucket()`이 `setMinutes(0,0,0)` 후 `toISOString()`인데, KST는 UTC+9 정시 오프셋이고 서머타임이 없어서 정시 내림 결과가 UTC에서든 KST에서든 같은 순간이다. 러너가 UTC라도 버킷은 안 틀어진다.
 
-② **cron은 밀린다.** 러너 혼잡 시 수십 분 지연이 흔하다. 1시간 버킷 기준이라 정각(`0 * * * *`)에 걸면 밀렸을 때 버킷이 비거나 겹친다. **`5 * * * *`** 로 두면 밀려도 같은 버킷에 떨어질 확률이 높다.
+② **GitHub `schedule:`은 못 쓴다.** 밀리는 정도가 아니라 회차가 통째로 버려진다(위 실측표). 이 함정 때문에 트리거를 cron-job.org로 옮겼다. **여기에 cron을 다시 추가하지 말 것** — 되살리면 고장을 가리는 예비선이 된다.
 
-③ **60일 무활동이면 GitHub이 스케줄을 자동으로 끈다.** 커밋이 뜸해지면 조용히 멈춘다.
+③ **PAT 만료가 새로운 단일 실패점이다.** cron-job.org에 넣은 토큰이 만료되면 dispatch가 401로 떨어지고 파이프라인이 **완전히 멈춘다**(예비선이 없으므로 0회). 만료일을 달력에 적어둘 것. 멈추면 cron-job.org 실패 알림 메일이 온다.
 
 ④ **스크래핑 차단 위험.** dcbest·theqoo·instiz는 HTML 스크래핑이라 러너 IP 대역이 막힐 수 있다. **이관 직후 소스별 수집 건수를 반드시 대조할 것** — 기준값(로컬 실측, 2026-08-16 13:00 UTC 버킷):
 
@@ -458,7 +512,7 @@ dcbest 49 · theqoo 20 · instiz 10 · youtube 110 · gtrends 10 = 199건
 
 총합은 시간대에 따라 흔들리지만 **특정 소스만 0건**인 건 다르다. 막히면 그 소스만 별도 경로(자체 서버/프록시)가 필요하다.
 
-> **`schedule:`은 기본 브랜치(master)에서만 돈다.** `workflow_dispatch` 버튼도 파일이 기본 브랜치에 있어야 UI에 나타난다. 머지 전에는 Actions 탭에 아무것도 보이지 않는 게 정상이다.
+> **`workflow_dispatch`는 워크플로 파일이 기본 브랜치(master)에 있어야 동작한다.** UI의 "Run workflow" 버튼도, cron-job.org가 때리는 dispatch API도 마찬가지다. 머지 전에는 Actions 탭에 아무것도 보이지 않는 게 정상이고, **cron-job.org 설정은 머지 후에 해야 404가 안 난다.**
 >
 > 머지에는 팀 조율이 걸려 있다 — **머지하면 master에서 `next build`가 깨진다.** `app/api/**`의 import 9곳이 구 스키마를 가리킨 채 끊겨 있어서다(의도한 상태이고 API 재작성 때 해소된다). 파이프라인 워크플로 자체는 `node`만 돌리므로 build와 무관하게 정상 동작한다. `lib/pipeline-v-he/**` 삭제도 songhaeunsong 브랜치가 살아 있어 공지가 필요하다.
 
