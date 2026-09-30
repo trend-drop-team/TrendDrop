@@ -1,4 +1,5 @@
 import ExploreView from "@/app/explore-view";
+import StaleCacheWriter from "@/app/stale-cache-writer";
 import { fetchApi } from "@/lib/api-client";
 import type { ApiResult } from "@/types/api/common";
 import type { HeatmapPayload } from "@/types/api/heatmap";
@@ -25,9 +26,19 @@ export default async function ExplorePage() {
     rank: row.rank,
   }));
 
+  const staleSummary = {
+    heading: "마지막으로 확인된 키워드",
+    items: keywords.slice(0, 5).map((item) => ({
+      primary: item.keyword,
+      secondary: item.category,
+      trailing: `${item.rank}위`,
+    })),
+  };
+
   return (
     <div className="page-shell">
       <main className="app-main">
+        <StaleCacheWriter cacheKey="explore" summary={staleSummary} />
         <ExploreView
           columns={columns}
           categories={categories}

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import StaleCacheWriter from "@/app/stale-cache-writer";
 import { fetchApi } from "@/lib/api-client";
 import type { KeywordDetail } from "@/types/api/keyword";
 
@@ -161,8 +162,20 @@ export default async function TrendDetailPage({ params }: { params: Promise<{ sl
     throw error;
   }
 
+  const staleSummary = {
+    heading: "마지막으로 확인된 상세",
+    items: [
+      {
+        primary: detail.keyword,
+        secondary: detail.category,
+        trailing: `${detail.rank}위 · ${detail.score}/100`,
+      },
+    ],
+  };
+
   return (
     <div className="td">
+      <StaleCacheWriter cacheKey={`trend:${slug}`} summary={staleSummary} />
       <div className="td-content">
         <div className="td-topbar">
           <Link href="/" className="td-back">

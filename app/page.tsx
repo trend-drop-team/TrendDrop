@@ -1,5 +1,6 @@
 import Onboarding from "@/app/onboarding";
 import RankingBoard from "@/app/ranking-board";
+import StaleCacheWriter from "@/app/stale-cache-writer";
 import { fetchApi } from "@/lib/api-client";
 import type { ApiResult } from "@/types/api/common";
 import type { CategoryRow } from "@/types/api/category";
@@ -29,9 +30,19 @@ export default async function HomePage() {
     .filter((row) => row.rank > WATCH_FROM_RANK)
     .slice(0, WATCH_LIMIT);
 
+  const staleSummary = {
+    heading: "마지막으로 확인된 순위",
+    items: dailyResult.data.slice(0, 5).map((row) => ({
+      primary: row.keyword,
+      secondary: row.category,
+      trailing: `${row.rank}위 · ${row.score}`,
+    })),
+  };
+
   return (
     <div className="page-shell">
       <main className="app-main">
+        <StaleCacheWriter cacheKey="home" summary={staleSummary} />
         <Onboarding categories={categories} />
 
         <RankingBoard snapshots={snapshots} daily={dailyResult.data} categories={categories} />
