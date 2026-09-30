@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 
 import { getDocList } from "@/lib/docs";
+import { SITE_DESCRIPTION, SITE_NAME, SITE_TITLE, siteUrl } from "@/lib/site";
 import { getCategories } from "@/server/services/category.service";
 import { getTrends } from "@/server/services/trend.service";
 
@@ -9,8 +10,25 @@ import CommandPalette from "./command-palette";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "TrendDrop",
-  description: "SNS 기반 트렌드 탐색 웹앱 프로토타입",
+  // 상대 경로 OG 이미지를 절대 주소로 펴는 기준. 없으면 카톡·슬랙이 그림을 못 불러온다.
+  metadataBase: new URL(siteUrl()),
+  title: { default: SITE_TITLE, template: `%s · ${SITE_NAME}` },
+  description: SITE_DESCRIPTION,
+  applicationName: SITE_NAME,
+  // 링크를 붙였을 때 뜨는 카드. 이미지는 app/opengraph-image.tsx가 자동으로 붙인다.
+  openGraph: {
+    type: "website",
+    siteName: SITE_NAME,
+    locale: "ko_KR",
+    url: "/",
+    title: SITE_TITLE,
+    description: SITE_DESCRIPTION,
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: SITE_TITLE,
+    description: SITE_DESCRIPTION,
+  },
 };
 
 // 첫 페인트 전에 저장된 테마를 적용해 FOUC(테마 깜빡임)를 막는다.
