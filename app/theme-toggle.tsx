@@ -29,13 +29,13 @@ export default function ThemeToggle() {
         <span className="theme-toggle-glyph" aria-hidden="true">
           ☀
         </span>
-        웜톤<span className="sr-only"> 테마로 전환</span>
+        <span className="theme-toggle-label">웜톤</span><span className="sr-only"> 테마로 전환</span>
       </span>
       <span className="theme-toggle-opt theme-toggle-to-dark">
         <span className="theme-toggle-glyph" aria-hidden="true">
           ◐
         </span>
-        다크<span className="sr-only"> 테마로 전환</span>
+        <span className="theme-toggle-label">다크</span><span className="sr-only"> 테마로 전환</span>
       </span>
     </button>
   );
