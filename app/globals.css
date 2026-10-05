@@ -46,6 +46,7 @@
   --code-bg: #0d1219;
   --code-text: #e6eaf0;
   --code-inline-bg: rgba(255, 255, 255, 0.08);
+  --bg-noise: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.035'/%3E%3C/svg%3E");
   --body-bg:
     radial-gradient(60% 40% at 100% 0, rgba(56, 189, 248, 0.1), transparent 55%),
     radial-gradient(50% 40% at 0 100%, rgba(61, 220, 132, 0.08), transparent 55%), #0b0e14;
@@ -170,8 +171,10 @@
 .collection-table td { color: var(--text); }
 .collection-table tr:last-child td { border-bottom: 0; }
 
+/* 단색 바닥: 창을 키우는 순간이나 iOS 고무줄 스크롤 영역에 그라데이션 반복 이음매가 비치지 않게 한다. */
 html {
   scroll-behavior: smooth;
+  background-color: var(--bg);
 }
 
 body {
@@ -179,7 +182,20 @@ body {
   min-height: 100dvh;
   font-family: "Noto Sans KR", sans-serif;
   color: var(--text);
-  background: var(--body-bg);
+}
+
+/*
+  배경 그라데이션은 문서가 아니라 화면(viewport)에 고정한다.
+  body에 두면 퍼센트 크기가 문서 높이를 따라가서, 창 크기를 바꿀 때마다 그라데이션이 늘었다 줄며
+  옅은 그라데이션의 계단(밴딩)이 움직여 층처럼 보였다. 위에 얹은 미세 노이즈가 그 계단을 흩뜨린다.
+*/
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: var(--bg-noise), var(--body-bg);
 }
 
 a {
