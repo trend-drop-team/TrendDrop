@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 
 import { COMMAND_OPEN_EVENT } from "./command-palette";
@@ -12,6 +13,19 @@ type NavItem = {
   label: string;
   icon: ReactNode;
 };
+
+function AvatarFallback() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <circle cx="12" cy="8" r="3.2" fill="currentColor" />
+      <path d="M5.5 20c.7-3.7 2.9-5.5 6.5-5.5s5.8 1.8 6.5 5.5" fill="currentColor" />
+    </svg>
+  );
+}
+
+function avatarLabel(name: string) {
+  return name.trim().slice(0, 1).toUpperCase();
+}
 
 const RankIcon = (
   <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
@@ -72,6 +86,25 @@ function isActive(pathname: string, href: string): boolean {
 
 export default function AppNav() {
   const pathname = usePathname() ?? "/";
+  const [user, setUser] = useState<{ name?: string | null; email: string } | null>(null);
+  const [profileOpen, setProfileOpen] = useState(false);
+
+  useEffect(() => {
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "");
+    if (!apiUrl) return;
+    fetch(`${apiUrl}/api/auth/me`, { credentials: "include" })
+      .then((response) => response.ok ? response.json() as Promise<{ data?: { name?: string | null; email: string } }> : null)
+      .then((payload) => { if (payload?.data) setUser(payload.data); })
+      .catch(() => undefined);
+  }, [pathname]);
+
+  async function logout() {
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "");
+    if (apiUrl) await fetch(`${apiUrl}/api/auth/logout`, { method: "POST", credentials: "include" }).catch(() => undefined);
+    setUser(null);
+    setProfileOpen(false);
+    window.location.assign("/login");
+  }
 
   return (
     <>
@@ -102,6 +135,23 @@ export default function AppNav() {
           </button>
 
           <ThemeToggle />
+          {user ? (
+            <div className="header-profile-wrap">
+              <button type="button" className="header-profile" aria-label="프로필 메뉴 열기" aria-expanded={profileOpen} onClick={() => setProfileOpen((open) => !open)}>
+                <span className="header-avatar" aria-hidden="true">
+                <AvatarFallback />
+                <span className="header-avatar-letter">{avatarLabel(user.name || user.email)}</span>
+                </span>
+              </button>
+              {profileOpen && (
+                <div className="profile-popover" role="dialog" aria-label="프로필 메뉴">
+                  <strong>{user.name || "TrendDrop 사용자"}</strong>
+                  <span className="profile-email">{user.email.includes("@users.trenddrop.local") ? "카카오 계정" : user.email}</span>
+                  <button type="button" className="profile-logout" onClick={logout}>로그아웃</button>
+                </div>
+              )}
+            </div>
+          ) : <Link href="/login" className="header-login-link">로그인</Link>}
         </div>
       </header>
 
