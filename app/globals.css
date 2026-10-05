@@ -46,6 +46,7 @@
   --code-bg: #0d1219;
   --code-text: #e6eaf0;
   --code-inline-bg: rgba(255, 255, 255, 0.08);
+  --bg-noise: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.035'/%3E%3C/svg%3E");
   --body-bg:
     radial-gradient(60% 40% at 100% 0, rgba(56, 189, 248, 0.1), transparent 55%),
     radial-gradient(50% 40% at 0 100%, rgba(61, 220, 132, 0.08), transparent 55%), #0b0e14;
@@ -131,22 +132,38 @@
 .profile-email { overflow: hidden; color: var(--muted); font-size: 0.78rem; text-overflow: ellipsis; white-space: nowrap; }
 .profile-logout { margin-top: 8px; padding: 9px 10px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface-soft); color: var(--text); font: inherit; font-size: 0.82rem; cursor: pointer; }
 .profile-logout:hover { border-color: var(--accent); color: var(--accent); }
-.login-page-shell { min-height: calc(100vh - 124px); display: grid; place-items: center; padding: 48px 20px 96px; }
-.login-page { width: min(100%, 420px); text-align: center; }
-.login-brand-mark { display: grid; place-items: center; width: 58px; height: 58px; margin: 0 auto 24px; border-radius: 18px; background: var(--accent); color: var(--on-accent); font-weight: 900; letter-spacing: -0.08em; }
-.login-page h1 { margin: 8px 0 12px; font-size: clamp(1.8rem, 7vw, 2.4rem); letter-spacing: -0.05em; }
-.login-description, .login-legal { color: var(--muted); line-height: 1.65; }
-.login-card { display: grid; gap: 12px; margin-top: 30px; padding: 24px; border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--surface); box-shadow: var(--shadow); }
-.social-login-button { display: flex; align-items: center; justify-content: center; gap: 10px; min-height: 52px; border: 0; border-radius: 12px; font: inherit; font-weight: 800; cursor: pointer; transition: transform 160ms ease, opacity 160ms ease; }
+/* 로그인 — 헤더와 탭바를 뺀 남은 높이를 채운다. 모바일은 카드 없이 버튼을 엄지 쪽(아래)에, 641px 이상은 가운데 카드. */
+.login-page-shell { --login-chrome: calc(var(--tabbar-gap) + 72px + var(--tabbar-h) + var(--tabbar-gap) * 2 + env(safe-area-inset-bottom)); display: grid; place-items: center; min-height: calc(100vh - var(--login-chrome)); min-height: calc(100dvh - var(--login-chrome)); padding: 32px 20px; }
+.login-page { display: grid; gap: 36px; width: min(100%, 440px); padding: 44px 40px 36px; border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--surface); box-shadow: var(--shadow); text-align: center; word-break: keep-all; overflow-wrap: break-word; }
+.login-brand-mark { display: grid; place-items: center; width: 56px; height: 56px; margin: 0 auto 22px; border-radius: 18px; background: var(--accent); color: var(--on-accent); font-weight: 900; letter-spacing: -0.08em; }
+.login-page h1 { max-width: none; margin: 10px auto 14px; font-size: clamp(1.7rem, 7.4vw, 2.2rem); line-height: 1.2; letter-spacing: -0.04em; text-wrap: balance; }
+.login-description, .login-legal { margin: 0; color: var(--muted); line-height: 1.65; text-wrap: balance; }
+.login-actions { display: grid; gap: 20px; }
+.login-card { display: grid; gap: 12px; }
+.social-login-button { position: relative; display: flex; align-items: center; justify-content: center; min-height: 52px; padding: 0 52px; border-radius: 12px; font: inherit; font-size: 0.98rem; font-weight: 700; cursor: pointer; transition: transform 160ms ease, opacity 160ms ease; }
 .social-login-button:hover:not(:disabled) { transform: translateY(-1px); }
+.social-login-button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 .social-login-button:disabled { cursor: wait; opacity: 0.65; }
-.kakao-login-button { background: #fee500; color: #191919; }
-.google-login-button { background: #fff; color: #1f1f1f; }
-.social-login-icon { display: grid; place-items: center; width: 22px; height: 22px; font-weight: 900; }
-.kakao-icon { font-size: 0.72rem; }
-.google-icon { border: 2px solid #4285f4; border-radius: 50%; color: #4285f4; font-size: 0.78rem; }
+.social-login-icon { position: absolute; left: 20px; top: 50%; width: 20px; height: 20px; transform: translateY(-50%); }
+.social-login-label { white-space: nowrap; }
+/* 카카오 가이드: #FEE500 배경, 검정 심볼, 85% 검정 라벨 */
+.kakao-login-button { border: 1px solid #fee500; background: #fee500; color: rgba(0, 0, 0, 0.85); }
+/* Google 가이드: 흰 배경, #747775 1px 테두리, #1F1F1F 라벨 */
+.google-login-button { border: 1px solid #747775; background: #fff; color: #1f1f1f; }
 .login-error { margin: 4px 0 0; color: var(--down); font-size: 0.88rem; }
-.login-legal { margin: 20px auto 0; font-size: 0.76rem; }
+.login-legal { font-size: 0.76rem; }
+@media (max-width: 640px) {
+  .login-page-shell { --login-chrome: calc(var(--tabbar-gap) + 62px + var(--tabbar-h) + var(--tabbar-gap) * 2 + env(safe-area-inset-bottom)); place-items: stretch; padding: 28px 10px 16px; }
+  .login-page { grid-template-rows: 1fr auto; align-content: space-between; gap: 28px; width: 100%; padding: 0; border: 0; border-radius: 0; background: none; box-shadow: none; }
+  .login-intro { align-self: center; }
+}
+@media (max-width: 640px) and (max-height: 700px) {
+  .login-page-shell { padding-top: 16px; }
+  .login-brand-mark { width: 44px; height: 44px; margin-bottom: 14px; border-radius: 14px; font-size: 0.86rem; }
+}
+@media (max-width: 640px) and (max-height: 600px) {
+  .login-brand-mark { display: none; }
+}
 .collection-table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); }
 .collection-table { width: 100%; border-collapse: collapse; min-width: 900px; }
 .collection-table th, .collection-table td { padding: 14px 16px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
@@ -154,8 +171,10 @@
 .collection-table td { color: var(--text); }
 .collection-table tr:last-child td { border-bottom: 0; }
 
+/* 단색 바닥: 창을 키우는 순간이나 iOS 고무줄 스크롤 영역에 그라데이션 반복 이음매가 비치지 않게 한다. */
 html {
   scroll-behavior: smooth;
+  background-color: var(--bg);
 }
 
 body {
@@ -163,7 +182,20 @@ body {
   min-height: 100dvh;
   font-family: "Noto Sans KR", sans-serif;
   color: var(--text);
-  background: var(--body-bg);
+}
+
+/*
+  배경 그라데이션은 문서가 아니라 화면(viewport)에 고정한다.
+  body에 두면 퍼센트 크기가 문서 높이를 따라가서, 창 크기를 바꿀 때마다 그라데이션이 늘었다 줄며
+  옅은 그라데이션의 계단(밴딩)이 움직여 층처럼 보였다. 위에 얹은 미세 노이즈가 그 계단을 흩뜨린다.
+*/
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: var(--bg-noise), var(--body-bg);
 }
 
 a {
@@ -2143,8 +2175,59 @@ h3 {
     padding: 8px 10px;
   }
 
+  /* 좁은 헤더: 로그인 링크가 잘리지 않도록 부제·테마 라벨을 접는다 */
+  .app-header-inner {
+    gap: 10px;
+    padding: 10px 12px;
+  }
+
+  .app-brand {
+    gap: 10px;
+  }
+
+  .app-brand .brand-mark {
+    flex: 0 0 auto;
+    width: 40px;
+    height: 40px;
+    border-radius: 13px;
+  }
+
+  .app-brand .brand-sub {
+    white-space: nowrap;
+  }
+
   .cmdk-overlay {
     padding: 8vh 12px 12px;
+  }
+}
+
+@media (max-width: 400px) {
+  .app-brand .brand-sub {
+    display: none;
+  }
+
+  .theme-toggle {
+    padding: 9px 11px;
+  }
+
+  .theme-toggle-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+}
+
+@media (max-width: 360px) {
+  .app-header-inner,
+  .app-brand {
+    gap: 8px;
+  }
+
+  .app-brand .brand-name {
+    font-size: 0.95rem;
   }
 }
 
