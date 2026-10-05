@@ -8,6 +8,7 @@ import { INTERESTS_EVENT, INTERESTS_KEY } from "@/app/onboarding";
 import RollingNumber from "@/app/rolling-number";
 import ShareButton from "@/app/share-button";
 import ShareCardButton from "@/app/share-card-button";
+import KakaoShareButton from "@/app/kakao-share-button";
 import { isStale, relativeTime } from "@/lib/utils/date";
 import { getRankDelta } from "@/lib/utils/rank";
 import type { TimelineSnapshot, TrendRow } from "@/types/api/trend";
@@ -572,6 +573,7 @@ export default function RankingBoard({ snapshots, daily, categories, latestColle
           <div className="share-actions">
             {/* 보고 있는 목록의 1위를 공유 문구에 넣어 "이거 봐봐"가 바로 되게 한다. */}
             <ShareButton path="/" title="TrendDrop 실시간 트렌드" text={shareText} />
+            <KakaoShareButton path="/" title="TrendDrop 실시간 트렌드" text={shareText} />
             {/* 카드는 화면 필터와 무관하게 늘 전체 TOP5다 — 카드 제목이 그렇게 말한다. */}
             <ShareCardButton
               cardPath="/share-card"
