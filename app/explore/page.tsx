@@ -8,6 +8,8 @@ import type { TimelineSnapshot } from "@/types/api/trend";
 /** 히트맵 가로축·A/B 비교 차트가 함께 보는 구간. */
 const WINDOW_HOURS = 12;
 
+// 빌드 타임 프리렌더 금지 — 프리렌더로 돌리면 빌드가 백엔드 가동 여부에 묶인다.
+// 데이터 캐시는 fetchApi가 맡는다.
 export const dynamic = "force-dynamic";
 
 export default async function ExplorePage() {

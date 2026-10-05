@@ -2,7 +2,7 @@ import { isDbConfigured } from "@/db";
 import { clockLabel, nowIso, relativeTime } from "@/lib/utils/date";
 import { normalize } from "@/lib/utils/normalize";
 import { mockHistory, mockKeywordDetail } from "@/mocks/trends/repository";
-import { NotFoundError } from "@/server/http/errors";
+import { NotFoundError } from "@/server/http/not-found";
 import {
   dbFindKeywordBySlug,
   dbHistoryIngredients,
