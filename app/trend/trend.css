@@ -60,6 +60,8 @@
   gap: 14px;
   margin-bottom: 40px;
   font-size: 0.85rem;
+  /* 좁은 폭에서 공유 버튼이 밀려 넘치는 대신 아랫줄로 접힌다. */
+  flex-wrap: wrap;
 }
 
 .td-back {
