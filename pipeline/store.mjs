@@ -5,20 +5,20 @@
  * 스키마가 없으면 assertSchema()가 안내 메시지와 함께 즉시 중단시킨다.
  * (스키마 반영: `npm run db:push` 또는 `npx drizzle-kit push --config=drizzle.config.mjs`)
  *
- * 이 파이프라인이 쓰는 테이블 7개:
+ * 이 파이프라인이 쓰는 테이블 8개:
  *   sources             수집 소스 마스터 (dcbest/theqoo/instiz/youtube/gtrends 5행 고정) — 데이터만 시드
  *   raw_signals         수집 원문 (1시간 버킷). run_id로 어느 collect 실행에서 왔는지 귀속
  *   collection_runs     파이프라인 실행 로그. 이 파이프라인은 두 종류를 남긴다:
  *                          pipeline='collect'  매시간 1건 — raw_signals 소유
  *                          pipeline='popular'  랭킹마다 1건 — trend_snapshots 소유
  *                        (수집과 랭킹이 분리돼 있어 run 자체가 별개다. 11장 PIPELINE.md 참고)
- *   categories           카테고리 마스터 — verdict.mjs CATEGORIES에서 노이즈 2종(일반어·문법조각)을
- *                        뺀 7행 고정. sources처럼 데이터만 시드
- *   keywords             키워드 엔티티. category_id(FK→categories)는 LLM 판정의 content_type으로
- *                        채운다 — content_type 축(인물/사건·사고 등)을 공식 카테고리로 쓰기로 결정
- *                        (예전 UI 축 푸드/뷰티/테크는 폐기. PIPELINE.md TODO 참고)
+ *   categories           카테고리 마스터 — issue-prompt.mjs ISSUE_CATEGORIES와 같은 8행 고정.
+ *                        sources처럼 데이터만 시드
+ *   keywords             키워드 엔티티. category_id(FK→categories)는 이슈 추출이 붙인 카테고리로 채운다
  *   trend_snapshots      랭킹 실행의 top-N. keyword_id FK, reasons(jsonb)에 소스별 근거 보관
- *   keyword_verdicts     LLM 판정 캐시
+ *   text_extractions     글 단위 이슈 추출 캐시 (text_hash PK)
+ *   keyword_aliases      이름 사전 — 검수가 같은 대상으로 묶은 이름(별칭 → 정식)
+
  *
  * env: DATABASE_URL. 없으면 호출 측에서 저장을 스킵한다.
  */
@@ -87,10 +87,8 @@ export async function seedSources() {
 }
 
 /**
- * 카테고리 7행 고정 목록 — verdict.mjs CATEGORIES 중 keep=true 키워드가 받을 수 있는 것들.
- * (일반어·문법조각은 keep=false 전용 노이즈 라벨이라 키워드로 승격되지 않아 뺐다.)
- * verdict.mjs가 이 파일을 import하므로 순환을 피하려고 목록을 여기 복제한다 —
- * verdict.mjs CATEGORIES를 바꾸면 여기도 같이 맞출 것.
+ * 카테고리 8행 고정 목록 — issue-prompt.mjs ISSUE_CATEGORIES와 같은 이름이어야 한다.
+ * (slug·정렬 순서가 필요해 여기 따로 둔다. ISSUE_CATEGORIES를 바꾸면 여기도 같이 맞출 것)
  */
 const CATEGORY_SEED = [
   { name: "인물", slug: "people", sortOrder: 1 },
@@ -100,9 +98,11 @@ const CATEGORY_SEED = [
   { name: "재난·속보", slug: "breaking", sortOrder: 5 },
   { name: "정치·사회", slug: "politics", sortOrder: 6 },
   { name: "스포츠", slug: "sports", sortOrder: 7 },
+  // 2026-10-14 이슈 추출 전환 때 추가 — 서비스 목적이 "유행어·인기 검색어"라서
+  { name: "유행어·밈", slug: "meme", sortOrder: 8 },
 ];
 
-/** categories 7행 시드(멱등). seedSources와 같은 방식 — name UNIQUE 기준 ON CONFLICT. */
+/** categories 8행 시드(멱등). seedSources와 같은 방식 — name UNIQUE 기준 ON CONFLICT. */
 export async function seedCategories() {
   const s = await sql();
   await assertSchema();
@@ -140,7 +140,7 @@ async function sourceIdMap() {
  * 공유하는 테이블이라 pipeline 컬럼으로 반드시 구분해야 한다.
  *
  * 이 파이프라인은 이 함수를 두 자리에서 부른다 — collect.mjs(pipeline: "collect",
- * 매시간 1건)와 rank-popular.mjs/backfill-popular.mjs(pipeline: "popular",
+ * 매시간 1건)와 rank-popular.mjs(pipeline: "popular",
  * 랭킹마다 1건). 반환된 runId를 뒤이어 insertRawItems/saveTrendSnapshots에 넘긴다.
  */
 export async function startRun({ pipeline, geo = "KR", bucketAt, windowHours, buckets } = {}) {
@@ -207,103 +207,27 @@ export async function insertRawItems(rows, runId) {
  * 기준점은 now()가 아니라 max(bucket_at): 이번 시각 수집이 실패해도 직전 데이터로
  * 랭킹은 나오게 하되, 호출 측이 기준 시각을 출력해 오래된 데이터를 알아채게 한다.
  */
-export async function loadRecentItems(hours = 6) {
+export async function loadRecentItems(hours = 6, { offsetHours = 0 } = {}) {
   const s = await sql();
   await assertSchema();
+  // offsetHours: 창 끝을 최신 버킷에서 그만큼 과거로 민다(실험에서 다른 시간대 비교용)
   const rows = await s`
-    SELECT src.kind AS site, r.source, r.text, r.video_id, r.meta, r.bucket_at
+    SELECT src.kind AS site, r.source, r.text, r.text_hash, r.video_id, r.meta, r.bucket_at
     FROM raw_signals r JOIN sources src ON src.id = r.source_id
     WHERE r.bucket_at > (SELECT max(bucket_at) FROM raw_signals)
-                      - make_interval(hours => ${hours})
+                      - make_interval(hours => ${hours + offsetHours})
+      AND r.bucket_at <= (SELECT max(bucket_at) FROM raw_signals)
+                      - make_interval(hours => ${offsetHours})
     ORDER BY r.bucket_at, r.id`;
   return rows.map((r) => ({
     site: r.site,
     kind: r.source,
     text: r.text,
+    textHash: r.text_hash,
     videoId: r.video_id ?? r.meta?.videoId ?? null,
     meta: r.meta ?? null, // viewCount·likeCount·approxTraffic 등 가중 보정용
     bucketAt: new Date(r.bucket_at).toISOString(),
   }));
-}
-
-/** 백필용 — 전체 기간 원문을 버킷 순으로. (loadRecentItems와 같은 형식) */
-export async function loadAllItems() {
-  const s = await sql();
-  await assertSchema();
-  const rows = await s`
-    SELECT src.kind AS site, r.source, r.text, r.video_id, r.meta, r.bucket_at
-    FROM raw_signals r JOIN sources src ON src.id = r.source_id
-    ORDER BY r.bucket_at, r.id`;
-  return rows.map((r) => ({
-    site: r.site,
-    kind: r.source,
-    text: r.text,
-    videoId: r.video_id ?? r.meta?.videoId ?? null,
-    meta: r.meta ?? null,
-    bucketAt: new Date(r.bucket_at).toISOString(),
-  }));
-}
-
-/**
- * LLM 판정 캐시 — term 하나당 한 행. 같은 단어를 두 번 묻지 않기 위한 장치다.
- * (창이 6시간인데 1시간씩만 밀려서, 연속한 두 실행의 후보가 85% 겹친다.)
- *
- * DB 컬럼은 content_type(통합 스키마 이름)이지만, verdict.mjs 등 호출부는 여전히
- * category라는 이름으로 다룬다 — LLM 프롬프트·JSON 스키마의 필드명과 맞추기 위해
- * 이 파일 안에서만 별칭 처리한다(loadVerdicts는 content_type을 category로 셀렉트,
- * saveVerdicts는 category를 content_type 컬럼에 쓴다).
- */
-export async function loadVerdicts(terms) {
-  if (terms.length === 0) return new Map();
-  const s = await sql();
-  await assertSchema();
-  const rows = await s`SELECT term, keep, canonical, content_type AS category, reason
-    FROM keyword_verdicts WHERE term = ANY(${terms})`;
-  return new Map(rows.map((r) => [r.term, r]));
-}
-
-/** 판정 저장(업서트). 같은 term을 다시 판정하면 덮어쓴다. */
-export async function saveVerdicts(verdicts, model) {
-  if (verdicts.length === 0) return 0;
-  const s = await sql();
-  await assertSchema();
-  await s.begin(async (tx) => {
-    for (const v of verdicts) {
-      await tx`INSERT INTO keyword_verdicts
-        (term, keep, canonical, content_type, reason, sample, model)
-        VALUES (${v.term}, ${v.keep}, ${v.canonical ?? null}, ${v.category ?? null},
-                ${v.reason ?? null}, ${v.sample ?? null}, ${model})
-        ON CONFLICT (term) DO UPDATE SET
-          keep = EXCLUDED.keep, canonical = EXCLUDED.canonical,
-          content_type = EXCLUDED.content_type, reason = EXCLUDED.reason,
-          sample = EXCLUDED.sample, model = EXCLUDED.model, decided_at = now()`;
-    }
-  });
-  return verdicts.length;
-}
-
-/**
- * 기존 keywords의 category_id 일괄 백필 — keyword_verdicts 캐시에서, LLM 재호출 없이.
- * keywords.term은 병합된 canonical이므로 COALESCE(canonical, term) 기준으로 잇고,
- * 같은 canonical에 판정이 여럿이면 최신 decided_at을 쓴다. 비어 있는 행만 채운다.
- * 반환: 채운 행 수. (실행: node pipeline/backfill-categories.mjs)
- */
-export async function backfillKeywordCategories() {
-  const s = await sql();
-  await assertSchema();
-  await seedCategories();
-  const res = await s`
-    UPDATE keywords k SET category_id = c.id
-    FROM (
-      SELECT DISTINCT ON (COALESCE(canonical, term))
-        COALESCE(canonical, term) AS term, content_type
-      FROM keyword_verdicts
-      WHERE keep AND content_type IS NOT NULL
-      ORDER BY COALESCE(canonical, term), decided_at DESC
-    ) v
-    JOIN categories c ON c.name = v.content_type
-    WHERE k.term = v.term AND k.category_id IS NULL`;
-  return res.count;
 }
 
 /**
@@ -372,14 +296,15 @@ export async function upsertKeyword(term, { sourceId, categoryId } = {}) {
 }
 
 /**
- * 인기 랭킹 top-N을 trend_snapshots에 저장. ranked[i] = popular.mjs의 항목(이미
- * verdict.mjs가 keep=true만 남긴 결과). run은 호출 측이 startRun({ pipeline:
+ * 인기 랭킹 top-N을 trend_snapshots에 저장. ranked[i] = popular.mjs의 항목(issues.mjs가
+ * 검수까지 마친 결과). run은 호출 측이 startRun({ pipeline:
  * "popular" })으로 미리 만들어 runId를 넘긴다.
  *
  * 이 함수가 하지 않는 것 — previousRank는 저장하지 않는다. unified 스키마는
  * trend_snapshots에 그 컬럼이 없다(API가 read 시점에 직전 run과 조인해 계산하는
- * 방식으로 설계됨 — docs/unified-schema-api-spec.md 3.2절). summary도 아직 안 채운다
- * (LLM이 필요한데 term 단위 캐시와 맞지 않아 별도 설계 필요 — 후속 과제).
+ * 방식으로 설계됨 — docs/unified-schema-api-spec.md 3.2절).
+ * summary는 채우지 않는다 — 이 서비스는 키워드만 모은다(2026-10-14 yang 결정).
+ * 이슈 추출의 issue는 검수 판단 근거로만 쓰고 저장하지 않는다.
  */
 export async function saveTrendSnapshots(runId, bucketAt, ranked) {
   const s = await sql();
@@ -388,8 +313,8 @@ export async function saveTrendSnapshots(runId, bucketAt, ranked) {
   const byCategory = await categoryIdMap();
 
   // ranked에 있는 term은 전부 keywords로 승격한다(스펙 §2.10). source_id는
-  // 가중치가 가장 높은 소스로 추정, category_id는 verdict.mjs가 붙인 카테고리 이름을
-  // categories.id로 변환(노이즈 카테고리 등 시드에 없는 이름이면 null).
+  // 가중치가 가장 높은 소스로 추정, category_id는 이슈 추출이 붙인 카테고리 이름을
+  // categories.id로 변환(시드에 없는 이름이면 null).
   // upsertKeyword는 트랜잭션 밖에서 순차 호출 —
   // 레이스 재시도 로직이 자체 커넥션을 쓰는 편이 트랜잭션 안에서보다 단순하다.
   const keywordIds = [];
@@ -440,4 +365,69 @@ export async function saveTrendSnapshots(runId, bucketAt, ranked) {
     }
   });
   return ranked.length;
+}
+
+/**
+ * 이슈 추출 캐시(text_extractions) 조회 — 현재 프롬프트 버전으로 뽑은 것만.
+ * 반환: Map<textHash, { timeliness, keywords, model }>
+ *
+ * 테이블이 아직 없으면(스키마 반영 전 --save 없이 미리 돌려볼 때) 빈 Map — 전부 새로 뽑는다.
+ */
+export async function loadExtractions(hashes, promptVersion) {
+  if (hashes.length === 0) return new Map();
+  const s = await sql();
+  if (!(await tableExists("text_extractions"))) return new Map();
+  const rows = await s`SELECT text_hash, timeliness, keywords, model FROM text_extractions
+    WHERE text_hash = ANY(${hashes}) AND prompt_version = ${promptVersion}`;
+  return new Map(rows.map((r) => [r.text_hash, { timeliness: r.timeliness, keywords: r.keywords, model: r.model }]));
+}
+
+/** 추출 결과 저장. 예전 프롬프트 버전으로 뽑은 행은 덮어쓴다. entries: [{ textHash, timeliness, keywords, model }] */
+export async function saveExtractions(entries, promptVersion) {
+  if (entries.length === 0) return;
+  const s = await sql();
+  await s.begin(async (tx) => {
+    for (const e of entries) {
+      await tx`INSERT INTO text_extractions (text_hash, prompt_version, model, timeliness, keywords)
+        VALUES (${e.textHash}, ${promptVersion}, ${e.model}, ${e.timeliness}, ${tx.json(e.keywords)})
+        ON CONFLICT (text_hash) DO UPDATE SET
+          prompt_version = EXCLUDED.prompt_version, model = EXCLUDED.model,
+          timeliness = EXCLUDED.timeliness, keywords = EXCLUDED.keywords, extracted_at = now()`;
+    }
+  });
+}
+
+/** 이름 사전 전체 — Map<별칭, 정식 이름>. 테이블이 없으면 빈 Map. */
+export async function loadAliases() {
+  const s = await sql();
+  if (!(await tableExists("keyword_aliases"))) return new Map();
+  const rows = await s`SELECT alias, canonical FROM keyword_aliases`;
+  return new Map(rows.map((r) => [r.alias, r.canonical]));
+}
+
+/**
+ * 검수가 묶은 이름 저장. pairs: [[별칭, 정식 이름]]
+ * 정식 이름이 다른 별칭의 정식 이름으로 다시 묶이면(A→B 뒤 B→C) 기존 A도 C로 당긴다 —
+ * 사전을 한 번만 따라가면 끝나게(체인 없이) 유지한다.
+ */
+export async function saveAliases(pairs, model) {
+  if (pairs.length === 0) return;
+  const s = await sql();
+  await s.begin(async (tx) => {
+    for (const [alias, canonical] of pairs) {
+      if (alias === canonical) continue;
+      await tx`INSERT INTO keyword_aliases (alias, canonical, model)
+        VALUES (${alias}, ${canonical}, ${model})
+        ON CONFLICT (alias) DO UPDATE SET canonical = EXCLUDED.canonical, model = EXCLUDED.model`;
+      await tx`UPDATE keyword_aliases SET canonical = ${canonical} WHERE canonical = ${alias}`;
+      // 정식 이름이 예전엔 별칭이었다면(순환 방지) 그 행은 지운다
+      await tx`DELETE FROM keyword_aliases WHERE alias = ${canonical}`;
+    }
+  });
+}
+
+async function tableExists(name) {
+  const s = await sql();
+  const [row] = await s`SELECT to_regclass(${"public." + name}) AS reg`;
+  return Boolean(row?.reg);
 }

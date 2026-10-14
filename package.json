@@ -17,7 +17,6 @@
     "verify:migrations": "node scripts/verify-migrations.mjs"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.115.0",
     "cors": "^2.8.6",
     "drizzle-orm": "^0.45.2",
     "express": "^5.2.1",

@@ -18,22 +18,29 @@
  *    다루는가"가 더 의미 있는 신호라 매체 단위로 묶었다.
  *  - boost의 기준점을 옮겼다. 자세한 건 각 boost 함수 주석 참고.
  *
+ * 집계 단위(키워드)는 호출 측이 termsOf로 넘긴다 — 지금은 issues.mjs의 글 단위 추출 결과.
+ * (2026-10-14 전까지는 tokenize.mjs로 단어를 쪼개 셌다. 그 방식은 이름이 쪼개져서 폐기)
+ *
  * 입력 행: { site, kind, text, videoId?, meta?, bucketAt }
  */
-import { tokenize } from "./tokenize.mjs";
 
-/** site|kind → 가중치. 유튜브가 메인, 커뮤니티가 서브. */
+/**
+ * site|kind → 가중치.
+ * 2026-10-14 유튜브를 절반으로 낮췄다(제목 12 → 6, 댓글 3 → 1.5). 옛 방식에선 상위 20 점수의
+ * 71%가 유튜브였다 — 급상승 영상 20개가 몇 시간씩 머물러서. 구글을 30~40으로 올려 보기도 했는데
+ * 커뮤니티 언급 없는 검색어가 상위를 채워서 20 그대로 두고, 대신 교차 보너스를 키웠다.
+ */
 export const WEIGHTS = {
   "gtrends|title": 20, // 이미 검증된 트렌드라 유튜브보다 살짝 위
-  "youtube|title": 12,
-  "youtube|comment": 3,
+  "youtube|title": 6,
+  "youtube|comment": 1.5,
   "dcbest|title": 4,
   "theqoo|title": 4,
   "instiz|title": 4,
 };
 
 const DEFAULTS = {
-  crossBonus: 1.25, // 2+ 소스 교차출현 가산 (v-he와 동일)
+  crossBonus: 1.6, // 2+ 소스 교차출현 가산. "여러 곳에서 동시에 말하는 것"이 위로 (v-he는 1.25)
   minMentions: 2, // 1회성 단어 제거
   keepSources: ["gtrends"], // 이 소스에 있으면 minMentions 무시하고 통과
   limit: 30,
@@ -95,8 +102,15 @@ function commentBoost(meta) {
   return 1 + Math.min(likes / 50, 4) / 4;
 }
 
+/**
+ * options.termsOf(row)       행에서 집계 단위(키워드 이름 배열)를 뽑는다. 필수.
+ * options.rowMultiplier(row) 행 가중치에 곱할 배율. 기본 1.
+ */
 export function rankPopular(rows, options = {}) {
   const opt = { ...DEFAULTS, ...options };
+  const termsOf = options.termsOf;
+  if (!termsOf) throw new Error("rankPopular: options.termsOf가 필요함");
+  const rowMultiplier = options.rowMultiplier ?? (() => 1);
   const weights = { ...WEIGHTS, ...(options.weights ?? {}) };
   if (rows.length === 0) throw new Error("빈 입력 — 창 안에 행이 없음");
 
@@ -138,9 +152,9 @@ export function rankPopular(rows, options = {}) {
       boost = commentBoost(row.meta) * (boostByVideo.get(row.videoId) ?? 1);
     }
     if (boost !== 1) boosted += 1;
-    const weight = base * boost;
+    const weight = base * boost * rowMultiplier(row);
 
-    for (const token of new Set(tokenize(row.text))) {
+    for (const token of new Set(termsOf(row))) {
       const dedup = videoDedupKey(row, token);
       if (dedup) {
         if (seenVideo.has(dedup)) continue;
