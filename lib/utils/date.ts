@@ -22,9 +22,37 @@ export function isStale(from: Date | null | undefined, now: Date): boolean {
   return now.getTime() - from.getTime() >= STALE_THRESHOLD_MS;
 }
 
-/** "14:00" 형태의 시:분. 타임존은 서버 기준(Asia/Seoul 배포 가정). */
-export function clockLabel(date: Date): string {
-  return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+const KST_TIME_ZONE = "Asia/Seoul";
+
+const kstClockFormatter = new Intl.DateTimeFormat("ko-KR", {
+  timeZone: KST_TIME_ZONE,
+  hour: "2-digit",
+  minute: "2-digit",
+  hourCycle: "h23",
+});
+
+const kstDateTimeFormatter = new Intl.DateTimeFormat("ko-KR", {
+  timeZone: KST_TIME_ZONE,
+  year: "numeric",
+  month: "long",
+  day: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+  hourCycle: "h23",
+});
+
+function toDate(input: Date | string): Date {
+  return typeof input === "string" ? new Date(input) : input;
+}
+
+/** "14:00" 형태의 시:분. 서버 OS 시간대에 기대지 않고 Asia/Seoul로 명시 고정. */
+export function clockLabel(date: Date | string): string {
+  return kstClockFormatter.format(toDate(date));
+}
+
+/** "2026년 1월 15일 14:00" 형태. 타임라인 등 날짜+시각 표시용, Asia/Seoul로 명시 고정. */
+export function dateTimeLabel(date: Date | string): string {
+  return kstDateTimeFormatter.format(toDate(date));
 }
 
 /** 응답 `meta.updatedAt`용 ISO 8601 현재 시각. */

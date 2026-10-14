@@ -6,6 +6,7 @@ import StaleCacheWriter from "@/app/stale-cache-writer";
 import { fetchApi } from "@/lib/api-client";
 import ShareButton from "@/app/share-button";
 import ShareCardButton from "@/app/share-card-button";
+import { dateTimeLabel } from "@/lib/utils/date";
 import { SITE_NAME } from "@/lib/site";
 import type { KeywordDetail } from "@/types/api/keyword";
 
@@ -161,7 +162,7 @@ function EvidenceTimeline({ detail }: { detail: KeywordDetail }) {
             </span>
             <div className="td-tl-body">
               <div className="td-tl-meta">
-                <span className="td-tl-time">{new Date(event.detectedAt).toLocaleString("ko-KR")}</span>
+                <span className="td-tl-time">{dateTimeLabel(event.detectedAt)}</span>
                 <span className="td-tl-channel">{event.channel}</span>
               </div>
               <p className="td-tl-text">{event.label}</p>
