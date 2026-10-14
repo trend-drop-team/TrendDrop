@@ -361,7 +361,17 @@ node --env-file=.env.local pipeline/experiments/golden-test.mjs
 node --env-file=.env.local pipeline/experiments/review-test.mjs
 ```
 
-과거 전 구간 재계산 스크립트(`backfill-popular.mjs`)는 옛 방식과 함께 지웠다. 새 방식으로 과거를 다시 만들려면 전 기간 글을 LLM으로 뽑아야 해서(무료 한도로 며칠) 필요해지면 따로 만든다.
+**과거 시간대 재계산** — `backfill-issues.mjs`. 최근 N시간의 정시마다 새 방식으로 top10을 다시 만든다(오래된 시간대부터, `growth_rate`가 직전 run과 비교하므로).
+
+```bash
+HOURS_BACK=48 node --env-file=.env.local pipeline/backfill-issues.mjs                         # 출력만
+HOURS_BACK=48 node --env-file=.env.local pipeline/backfill-issues.mjs --save                  # 새 run 추가
+HOURS_BACK=48 node --env-file=.env.local pipeline/backfill-issues.mjs --save --replace-all    # + 그 밖의 popular run 전부 삭제
+```
+
+창 안 글을 먼저 한꺼번에 추출하고(48시간이면 고유 글 ~1,800개 → Lite ~35회), 시간대마다 검수 3회 → 48시간에 Lite ~180회. 추출이 한도로 끊기면 과거 기록은 건드리지 않고 멈춘다(뽑은 건 저장돼 다시 돌리면 이어서). `--replace-all`은 이번에 만든 run 외의 popular run·`trend_snapshots`를 지우고, 어떤 순위·즐겨찾기·근거 콘텐츠도 가리키지 않는 `keywords` 행을 정리한다.
+
+> **2026-10-14 실행 기록** — 옛 단어 방식의 순위 기록(8월~)을 전부 지우고 최근 48시간만 새 방식으로 다시 만들었다. 더 긴 과거가 필요하면 `HOURS_BACK`을 늘려 다시 돌리면 된다(원문 `raw_signals`는 그대로 있다). 무료 한도(Lite 하루 500회) 때문에 하루에 3일치 정도가 한계다.
 
 > `npm run collect` / `npm run rank`은 `--env-file=.env.local`이 붙어 있다. 러너에는 `.env.local`이 없으므로(gitignore) 워크플로는 `node pipeline/*.mjs`를 직접 부르고 Secrets를 `env:`로 주입한다.
 
@@ -384,10 +394,11 @@ node --env-file=.env.local pipeline/experiments/review-test.mjs
 | `gemini.mjs`           | Gemini 호출·모델 순서·예비 전환         | ✅       |
 | `popular.mjs`          | 점수 로직(가중치·보정·velocity)         | ❌       |
 | `rank-popular.mjs`     | 최신 창 계산·저장 (진입점)              | 간접     |
+| `backfill-issues.mjs`  | 과거 시간대 재계산 (6장)                | 간접     |
 | `store.mjs`            | Postgres 저장 계층(DDL 없음)            | ❌       |
 | `experiments/`         | 정답 세트(`golden-*`, `review-test`)    | ✅       |
 
-2026-10-14 삭제: `tokenize.mjs`, `verdict.mjs`, `warm-verdicts.mjs`, `backfill-popular.mjs`, `backfill-categories.mjs` (옛 단어 방식).
+2026-10-14 삭제: `tokenize.mjs`, `verdict.mjs`, `warm-verdicts.mjs`, `backfill-popular.mjs`, `backfill-categories.mjs` (옛 단어 방식). `backfill-popular.mjs` 자리는 `backfill-issues.mjs`가 잇는다.
 
 ---
 
