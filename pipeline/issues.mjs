@@ -167,19 +167,32 @@ export async function extractMissing(rows, extractions, aliases, { onBatch } = {
 }
 
 /**
- * 대소문자만 다른 이름 통일 — 구글 검색어는 사람들이 친 그대로("gs25") 들어와서, 프롬프트로
- * 공식 표기를 요구해도 가끔 소문자가 남는다(2026-10-14 top10의 "gs25").
- *   - 창 안에 대소문자·띄어쓰기만 다른 이름이 여럿이면, 대문자가 섞인 표기 중 가장 많이 나온 것으로
- *   - 혼자뿐인 전부 소문자 영문 이름은, 숫자가 섞였거나 3글자 이하면 약어로 보고 대문자로 (gs25, kbo)
+ * 표기만 다른 이름 통일 — 대소문자·띄어쓰기만 다른 이름을 하나로 모은다.
+ * 구글 검색어는 사람들이 친 그대로("gs25", "pakistan vs sri lanka") 들어와서 프롬프트로 공식 표기를
+ * 요구해도 가끔 남고, 글마다 띄어쓰기가 달라 같은 이름이 갈린다("기아타이거즈" / "기아 타이거즈").
+ *   - 창 안에 대소문자·띄어쓰기만 다른 이름이 여럿이면 하나로: 대문자가 섞인 표기 우선, 그다음 많이 나온 것,
+ *     같으면 띄어 쓴 쪽(읽기 쉬움)
+ *   - 그렇게 고른 표기가 전부 소문자 영문이면 다듬는다: 숫자가 섞였거나 한 단어 4글자 이하면 약어로 보고
+ *     대문자(gs25 → GS25, asml → ASML), 아니면 단어 첫 글자만 대문자(pakistan vs sri lanka → Pakistan vs Sri Lanka)
  * 반환: [[바꿀 이름, 바꿀 표기]] — 호출 측이 이름 사전에 넣는다.
  */
+const SMALL_WORDS = new Set(["vs", "of", "and", "the", "de", "a", "in", "on"]);
+function tidyLowercase(name) {
+  if (!/^[a-z0-9 .'-]+$/.test(name)) return name;
+  const bare = name.replace(/\s+/g, "");
+  // 한 단어 4글자 이하는 약어인 경우가 대부분이다 (asml, kbo, ssg). 숫자가 섞여도 (gs25)
+  if (/[0-9]/.test(bare) || (!name.includes(" ") && bare.length <= 4)) return name.toUpperCase();
+  return name
+    .split(" ")
+    .map((w, i) => (i > 0 && SMALL_WORDS.has(w) ? w : w.charAt(0).toUpperCase() + w.slice(1)))
+    .join(" ");
+}
 function casingFixes(extractions, aliases) {
   const canon = (n) => aliases.get(n) ?? n;
   const groups = new Map(); // 정규화 키 → Map<표기, 횟수>
   for (const e of extractions.values()) {
     for (const k of e.keywords) {
       const name = canon(k.name);
-      if (!/[A-Za-z]/.test(name)) continue;
       const key = name.toLowerCase().replace(/\s+/g, "");
       const m = groups.get(key) ?? new Map();
       m.set(name, (m.get(name) ?? 0) + 1);
@@ -189,13 +202,13 @@ function casingFixes(extractions, aliases) {
   const fixes = [];
   for (const variants of groups.values()) {
     const names = [...variants.keys()];
-    const cased = names.filter((n) => /[A-Z]/.test(n)).sort((a, b) => variants.get(b) - variants.get(a));
-    let target = cased[0];
-    if (!target && names.length === 1) {
-      const n = names[0];
-      if (/^[a-z0-9]+$/.test(n) && (/[0-9]/.test(n) || n.length <= 3)) target = n.toUpperCase();
-    }
-    if (!target) continue;
+    const best = [...names].sort(
+      (a, b) =>
+        Number(/[A-Z]/.test(b)) - Number(/[A-Z]/.test(a)) ||
+        variants.get(b) - variants.get(a) ||
+        (b.match(/\s/g)?.length ?? 0) - (a.match(/\s/g)?.length ?? 0)
+    )[0];
+    const target = tidyLowercase(best);
     for (const n of names) if (n !== target) fixes.push([n, target]);
   }
   return fixes;

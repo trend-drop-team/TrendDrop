@@ -29,7 +29,8 @@ rank.yml — 매시 :20  (cron-job.org → workflow_dispatch)
           issues.mjs:
             1. 추출  text_extractions에 없는 글만 LLM(Lite)에 50줄씩 → 글마다 적힌 이름
                      코드가 "정말 글에 적힌 이름인가" 검증 → text_extractions에 저장
-            2. 점수  popular.mjs: 소스별 가중치 × 참여도 보정 × 시의성 → 후보 60개
+            2. 표기  대소문자·띄어쓰기만 다른 이름을 하나로 (코드, LLM 아님)
+               점수  popular.mjs: 소스별 가중치 × 참여도 보정 × 시의성 → 후보 60개
             3. 검수  후보 60개를 LLM에 3번 동시에 → 과반이 같은 판단만 적용
                      (같은 뜻 합치기 → keyword_aliases에 저장 / 일반어 빼기)
             4. 다시 점수 → top10
@@ -54,6 +55,31 @@ rank.yml — 매시 :20  (cron-job.org → workflow_dispatch)
 | ----------- | ----------------------------------------- | ------------ | -------------------------------- |
 | `collect`   | `collect.mjs`                             | 매시간 1건   | 그 실행에서 저장된 `raw_signals` |
 | `popular`   | `rank-popular.mjs`                        | 랭킹마다 1건 | 그 실행의 `trend_snapshots`      |
+
+### 키워드 하나가 top10에 오르기까지 (2026-10-14 실제 예)
+
+```
+① 수집 (collect, 매시 :05)        raw_signals에 글 원문이 쌓인다
+   theqoo  "인천 칼부림난동 50대 남자 범죄 이력"
+   dcbest  "[잡갤] 인천 흉기난동에 20대 딸 아직 의식 못 찾아"
+   instiz  "인천 칼부림 ㄷㄷ 시민들 대단하다"
+   theqoo  "4천만 빌려 이자만 5천만원 갚은 주부, 스스로 생 마감"
+
+② 추출 (LLM Lite, 글마다)          적힌 이름만. 없으면 비움
+   → 인천 칼부림 / 인천 흉기난동 / 인천 칼부림 / (없음 — 적힌 고유한 이름이 없음)
+
+③ 코드 검증                        이름이 정말 원문에 적혀 있나? (지어낸 이름은 버림)
+
+④ 표기 통일 (코드)                 "기아타이거즈" / "기아 타이거즈" 같은 띄어쓰기·대소문자 차이를 합침
+
+⑤ 점수                             글마다 소스 가중치(더쿠·디시·인스티즈 4점, 구글 20점…) × 시의성,
+                                   여러 소스에 나오면 ×1.6 → 이름별 합계, 상위 60개
+
+⑥ 검수 (LLM, 3번 물어 과반)        "인천 칼부림" = "인천 흉기난동" → 합침 (이름 사전에 저장)
+                                   "달리기", "우선주" → 일반어라 뺌
+
+⑦ 다시 점수 → top10                인천 흉기난동 (글 12개, 소스 3곳) 77점 → 3위
+```
 
 ---
 
@@ -120,7 +146,7 @@ raw_signals      id=5650  run_id=57  source_id=5(gtrends)  source='title'  text=
 
 **코드 검증 (`isWritten`)** — 모델이 이름을 지어내거나 다른 대상으로 바꾸면 버린다. 실제로 있었던 일: 주부 사망 기사 → `남편 명의 도용 빚보증 사건`, 검색어 `tving` → `이준혁`, `비셀 고베 대 전북` → `KBO`.
 - 구글 검색어: 이름과 검색어가 (대소문자·공백 무시) 한쪽이 다른 쪽을 포함해야 한다
-- 그 밖: `surface`가 원문에 있어야 하고, 이름이 원문에 그대로 있거나 / `surface`를 포함하거나 / `surface`가 3글자 이하 줄임말(펼친 이름은 두 단어 이하, 사건·사고로 끝나지 않음)이거나 / 한글↔영문 표기 차이여야 한다
+- 그 밖: `surface`가 원문에 있어야 하고, 이름이 원문에 그대로 있거나 / `surface`를 포함하거나 / `surface`가 3글자 이하 줄임말(펼친 이름은 두 단어 이하, 사건·사고로 끝나지 않음)이거나 / 한글↔영문 표기 차이이거나 / `surface`에 직함이 있고 이름이 그 현직자(`이 대통령` → 이재명)여야 한다
 - 카테고리 이름 자체(`사건·사고`)와 직함만 있는 이름(`국무총리`)도 버린다. `대통령`은 현직자 이름으로 바꾼다
 
 **캐시** — 결과는 `text_extractions`에 `text_hash` 단위로 저장한다. 글의 뜻은 안 바뀌고, 창(6시간)이 1시간씩 밀리면 새 글은 매시간 ~35~70개뿐이라 **추출 호출은 매시간 1~2회**다. `PROMPT_VERSION`을 올리면 그 버전으로 뽑은 결과만 유효해서 창 안 글(~330개)을 다음 실행이 새로 뽑는다(7회).
@@ -196,6 +222,18 @@ velocity: clamp(entry.boostSum / entry.boostCount, 0.5, 10);
 ```
 
 커뮤니티만 언급되면 보정이 없어 1점대, 조회수·좋아요·검색량이 높으면 3~5점대 이상으로 나온다. 이 값이 나중에 `trend_snapshots.velocity`로 저장된다.
+
+### 표기 통일 — `casingFixes` (점수 매기기 전, LLM 아님)
+
+창 안의 이름을 소문자·공백 제거 기준으로 묶어서, 표기만 다른 것을 하나로 모은다. 결과는 이름 사전(`keyword_aliases`)에 들어간다.
+
+- 어느 표기로 모을지: ① 대문자가 섞인 표기 ② 더 많이 나온 표기 ③ 띄어 쓴 표기 순
+  (`기아타이거즈` / `기아 타이거즈` → 기아 타이거즈, `nct wish` / `NCT WISH` → NCT WISH)
+- 고른 표기가 전부 소문자 영문이면(구글 검색어가 친 그대로 들어온 경우) 다듬는다:
+  - 숫자가 섞였거나 한 단어 4글자 이하 → 약어로 보고 대문자 (`gs25` → GS25, `asml` → ASML, `kbo` → KBO)
+  - 그 밖 → 단어 첫 글자만 대문자, `vs`·`of` 같은 짧은 말은 그대로 (`pakistan vs sri lanka` → Pakistan vs Sri Lanka)
+
+프롬프트로도 공식 표기를 요구하지만 Lite가 가끔 놓쳐서 코드로 한 번 더 맞춘다.
 
 ### 후보 풀 — 왜 60개인가
 
@@ -361,7 +399,17 @@ node --env-file=.env.local pipeline/experiments/golden-test.mjs
 node --env-file=.env.local pipeline/experiments/review-test.mjs
 ```
 
-과거 전 구간 재계산 스크립트(`backfill-popular.mjs`)는 옛 방식과 함께 지웠다. 새 방식으로 과거를 다시 만들려면 전 기간 글을 LLM으로 뽑아야 해서(무료 한도로 며칠) 필요해지면 따로 만든다.
+**과거 시간대 재계산** — `backfill-issues.mjs`. 최근 N시간의 정시마다 새 방식으로 top10을 다시 만든다(오래된 시간대부터, `growth_rate`가 직전 run과 비교하므로).
+
+```bash
+HOURS_BACK=48 node --env-file=.env.local pipeline/backfill-issues.mjs                         # 출력만
+HOURS_BACK=48 node --env-file=.env.local pipeline/backfill-issues.mjs --save                  # 새 run 추가
+HOURS_BACK=48 node --env-file=.env.local pipeline/backfill-issues.mjs --save --replace-all    # + 그 밖의 popular run 전부 삭제
+```
+
+창 안 글을 먼저 한꺼번에 추출하고(48시간이면 고유 글 ~1,800개 → Lite ~35회), 시간대마다 검수 3회 → 48시간에 Lite ~180회. 추출이 한도로 끊기면 과거 기록은 건드리지 않고 멈춘다(뽑은 건 저장돼 다시 돌리면 이어서). `--replace-all`은 이번에 만든 run 외의 popular run·`trend_snapshots`를 지우고, 어떤 순위·즐겨찾기·근거 콘텐츠도 가리키지 않는 `keywords` 행을 정리한다.
+
+> **2026-10-14 실행 기록** — 옛 단어 방식의 순위 기록(8월~)을 전부 지우고 최근 48시간만 새 방식으로 다시 만들었다. 더 긴 과거가 필요하면 `HOURS_BACK`을 늘려 다시 돌리면 된다(원문 `raw_signals`는 그대로 있다). 무료 한도(Lite 하루 500회) 때문에 하루에 3일치 정도가 한계다.
 
 > `npm run collect` / `npm run rank`은 `--env-file=.env.local`이 붙어 있다. 러너에는 `.env.local`이 없으므로(gitignore) 워크플로는 `node pipeline/*.mjs`를 직접 부르고 Secrets를 `env:`로 주입한다.
 
@@ -384,10 +432,11 @@ node --env-file=.env.local pipeline/experiments/review-test.mjs
 | `gemini.mjs`           | Gemini 호출·모델 순서·예비 전환         | ✅       |
 | `popular.mjs`          | 점수 로직(가중치·보정·velocity)         | ❌       |
 | `rank-popular.mjs`     | 최신 창 계산·저장 (진입점)              | 간접     |
+| `backfill-issues.mjs`  | 과거 시간대 재계산 (6장)                | 간접     |
 | `store.mjs`            | Postgres 저장 계층(DDL 없음)            | ❌       |
 | `experiments/`         | 정답 세트(`golden-*`, `review-test`)    | ✅       |
 
-2026-10-14 삭제: `tokenize.mjs`, `verdict.mjs`, `warm-verdicts.mjs`, `backfill-popular.mjs`, `backfill-categories.mjs` (옛 단어 방식).
+2026-10-14 삭제: `tokenize.mjs`, `verdict.mjs`, `warm-verdicts.mjs`, `backfill-popular.mjs`, `backfill-categories.mjs` (옛 단어 방식). `backfill-popular.mjs` 자리는 `backfill-issues.mjs`가 잇는다.
 
 ---
 
