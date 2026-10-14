@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import { Noto_Sans_KR, Space_Grotesk } from "next/font/google";
 
 import { getDocList } from "@/lib/docs";
 import { SITE_DESCRIPTION, SITE_NAME, SITE_TITLE, siteUrl } from "@/lib/site";
@@ -41,6 +42,22 @@ export const viewport: Viewport = {
 // 첫 페인트 전에 저장된 테마를 적용해 FOUC(테마 깜빡임)를 막는다.
 const themeScript = `try{var t=localStorage.getItem('td-theme');if(t==='warm'||t==='dark')document.documentElement.dataset.theme=t;}catch(e){}`;
 
+// 본문. Noto Sans KR은 용량이 커서 실제 쓰이는 굵기만 받는다(기본 400 + globals.css의 600/700/800/900).
+const notoSansKr = Noto_Sans_KR({
+  subsets: ["latin"],
+  weight: ["400", "600", "700", "800", "900"],
+  display: "swap",
+  variable: "--font-noto-sans-kr",
+});
+
+// 제목·숫자. 사이트 전체에서 bold(700)로만 쓰인다.
+const spaceGrotesk = Space_Grotesk({
+  subsets: ["latin"],
+  weight: ["700"],
+  display: "swap",
+  variable: "--font-space-grotesk",
+});
+
 export default async function RootLayout({
   children,
 }: Readonly<{
@@ -65,7 +82,12 @@ export default async function RootLayout({
   }));
 
   return (
-    <html lang="ko" data-theme="dark" suppressHydrationWarning>
+    <html
+      lang="ko"
+      data-theme="dark"
+      suppressHydrationWarning
+      className={`${notoSansKr.variable} ${spaceGrotesk.variable}`}
+    >
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>
