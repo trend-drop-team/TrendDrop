@@ -1,10 +1,10 @@
 # 매시간 5개 소스(dcbest·theqoo·instiz·youtube·gtrends)를 긁어 raw_signals에 쌓는다.
 # 로컬 launchd(com.trendrising.hourly)가 하던 일을 그대로 넘겨받는 자리다.
 #
-# ★ 이 워크플로는 Claude API를 쓰지 않는다. LLM 판정은 rank.yml에 있다.
-#   그래서 매시간 돌려도 Anthropic 비용이 0이고, 대신 버킷 해상도를 지킬 수 있다.
+# ★ 이 워크플로는 LLM(Gemini API)을 쓰지 않는다. LLM 호출은 rank.yml에 있다.
+#   그래서 매시간 돌려도 LLM 한도를 쓰지 않고, 대신 버킷 해상도를 지킬 수 있다.
 #   수집을 거르면 그 시간대의 글은 이미 사라져서 나중에 복구할 방법이 없다.
-#   (반대로 rank는 원문만 있으면 언제든 다시 계산된다 → rank.yml은 2시간 주기)
+#   (반대로 rank는 원문만 있으면 언제든 다시 계산된다 — rank.yml은 수집 15분 뒤 매시간)
 #
 # 문서: pipeline/PIPELINE.md 8-3
 
@@ -20,7 +20,7 @@ on:
   #   2026-08-26~09-30 실측 — cron "5 * * * *"(기대 24회/일)로 걸어둔 것이
   #   실제로는 하루 5.75회(24%)만 실행됐다. 간격 중앙값 4.1h, 최대 13.1h.
   #   실패 0회 · 실행시간 중앙값 0.7분 · 큐 대기 0분이라 우리 쪽 문제가 아니다.
-  #   같은 기간 rank.yml(2시간 주기)도 하루 5.31회 — cron 식을 뭐라고 쓰든
+  #   같은 기간 rank.yml(당시 2시간 주기)도 하루 5.31회 — cron 식을 뭐라고 쓰든
   #   이 레포엔 하루 5~6번만 떨어졌다. schedule은 best-effort라 혼잡하면
   #   지연되고, 밀린 회차는 소급 없이 버려진다(정각 부근이 최대 혼잡).
   #   결과적으로 raw_signals의 1시간 버킷이 14일 기준 76/336(23%)만 찼다.
@@ -57,7 +57,7 @@ jobs:
 
       # --omit=dev — 파이프라인은 devDependencies(drizzle-kit·typescript·eslint)를
       # 전혀 쓰지 않는다. 필요한 건 postgres 하나뿐이고 dependencies에 있다.
-      # (pipeline/**의 외부 import는 postgres와 @anthropic-ai/sdk 둘뿐이며 모두 지연 import)
+      # (pipeline/**의 외부 import는 postgres 하나뿐이며 지연 import. Gemini는 내장 fetch로 부른다)
       - run: npm ci --omit=dev
 
       # npm run collect가 아니라 node를 직접 부르는 이유 —
@@ -72,5 +72,5 @@ jobs:
           YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
           # 민감값이 아니라 secrets로 두지 않았다.
           REGION_CODE: KR
-          # ★ ANTHROPIC_API_KEY를 일부러 주지 않는다.
+          # ★ GEMINI_API_KEY를 일부러 주지 않는다.
           #   collect 경로에 LLM 호출이 섞여 들어오면 조용히 돌지 않고 바로 실패해서 드러난다.
