@@ -62,7 +62,7 @@ if (rows.length === 0) { rows = mockCategories(); source = "mock"; }  // 데이�
 - **`collection_runs`에 스냅샷 없는 run이 섞여 있을 수 있다.** 수집 파이프라인은 원문만 모으는 run(`trend_snapshots` 없음)과 랭킹까지 계산해 저장하는 run으로 나뉜다. "최근 run"이 필요한 쿼리는 pipeline 이름으로 거르지 말고 `exists(select 1 from trend_snapshots where run_id = ...)`처럼 실제 데이터 존재 여부로 거른다(`recentRuns()`가 이렇게 함) — pipeline 이름이 바뀌어도 안 깨진다.
 
 ## 인증
-`getUserId()`(x-user-id 헤더/td-user 쿠키를 신뢰하는 임시 경계, `TODO(auth)`)는 `server/http/auth.ts`에 있다. 실제 세션 발급이 붙기 전까지 이 함수를 우회하거나 다른 곳에 별도 인증 로직을 만들지 않는다.
+`getUserId()`(`server/http/auth.ts`)는 서명된 `td-session` 쿠키만 신뢰한다(#53 — 클라이언트가 보내는 `x-user-id` 헤더를 그대로 믿던 경계는 제거됨). 이 함수를 우회하거나 다른 곳에 별도 인증 로직을 만들지 않는다. 세션은 `backend/server.ts`의 OAuth 콜백에서 `createSession()`으로 발급된다.
 
 ## 검증
 - 여러 파일을 고칠 땐 단계마다 `npx tsc --noEmit`으로 깨진 import부터 잡는다.

@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Noto_Sans_KR, Space_Grotesk } from "next/font/google";
+import Script from "next/script";
 
 import { getDocList } from "@/lib/docs";
 import { SITE_DESCRIPTION, SITE_NAME, SITE_TITLE, siteUrl } from "@/lib/site";
@@ -92,6 +93,10 @@ export default async function RootLayout({
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>
       <body>
+        <Script
+          src="https://t1.kakaocdn.net/kakao_js_sdk/2.8.2/kakao.min.js"
+          strategy="afterInteractive"
+        />
         <AppNav />
         {children}
         {/* getDocList()는 fs를 쓰는 서버 전용이라 여기서 호출해 props로 내려준다. */}

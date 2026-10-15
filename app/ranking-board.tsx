@@ -8,6 +8,7 @@ import { INTERESTS_EVENT, INTERESTS_KEY } from "@/app/onboarding";
 import RollingNumber from "@/app/rolling-number";
 import ShareButton from "@/app/share-button";
 import ShareCardButton from "@/app/share-card-button";
+import KakaoShareButton from "@/app/kakao-share-button";
 import { isStale, relativeTime } from "@/lib/utils/date";
 import { getRankDelta } from "@/lib/utils/rank";
 import type { TimelineSnapshot, TrendRow } from "@/types/api/trend";
@@ -32,7 +33,7 @@ type Props = {
 const NOW_TICK_MS = 30_000;
 
 const PERIODS: { id: Period; label: string }[] = [
-  { id: "realtime", label: "실시간" },
+  { id: "realtime", label: "지금" },
   { id: "daily", label: "24시간" },
 ];
 
@@ -563,15 +564,16 @@ export default function RankingBoard({ snapshots, daily, categories, latestColle
             aria-pressed={live && isRealtime}
             onClick={handleLiveToggle}
             disabled={!isRealtime}
-            title={isRealtime ? "자동 재생 켜기/끄기" : "24시간 집계는 자동 재생을 쓰지 않습니다"}
+            title={isRealtime ? "LIVE 켜기/끄기" : "24시간 집계는 LIVE를 쓰지 않습니다"}
           >
             <span className="live-dot" aria-hidden="true" />
-            자동 재생
+            LIVE
           </button>
 
           <div className="share-actions">
             {/* 보고 있는 목록의 1위를 공유 문구에 넣어 "이거 봐봐"가 바로 되게 한다. */}
             <ShareButton path="/" title="TrendDrop 실시간 트렌드" text={shareText} />
+            <KakaoShareButton path="/" title="TrendDrop 실시간 트렌드" text={shareText} />
             {/* 카드는 화면 필터와 무관하게 늘 전체 TOP5다 — 카드 제목이 그렇게 말한다. */}
             <ShareCardButton
               cardPath="/share-card"
@@ -597,7 +599,7 @@ export default function RankingBoard({ snapshots, daily, categories, latestColle
               <span className="board-sep" aria-hidden="true">
                 ·
               </span>
-              {playing ? "과거 재생 중" : live ? "자동 재생 중" : "일시정지"}
+              {playing ? "과거 재생 중" : live ? "LIVE 중" : "일시정지"}
             </>
           ) : (
             <>
