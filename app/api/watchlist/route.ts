@@ -38,9 +38,11 @@ export async function POST(request: Request) {
     return errorResponse("keywordSlug is required", 400);
   }
 
+  const slug = keywordSlug.trim();
+
   try {
-    const id = await addWatchlistItem(userId, keywordSlug.trim());
-    return NextResponse.json({ data: { id, keywordSlug } }, { status: 201 });
+    const id = await addWatchlistItem(userId, slug);
+    return NextResponse.json({ data: { id, keywordSlug: slug } }, { status: 201 });
   } catch (error) {
     return handleRouteError(error, "Failed to add watchlist item");
   }

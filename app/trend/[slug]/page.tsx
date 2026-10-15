@@ -7,6 +7,7 @@ import { fetchApi } from "@/lib/api-client";
 import ShareButton from "@/app/share-button";
 import ShareCardButton from "@/app/share-card-button";
 import { dateTimeLabel } from "@/lib/utils/date";
+import KakaoShareButton from "@/app/kakao-share-button";
 import { SITE_NAME } from "@/lib/site";
 import type { KeywordDetail } from "@/types/api/keyword";
 
@@ -233,6 +234,11 @@ export default async function TrendDetailPage({ params }: { params: Promise<{ sl
           <span className="td-tag">{detail.category}</span>
           <div className="share-actions">
             <ShareButton
+              path={`/trend/${encodeURIComponent(detail.slug)}`}
+              title={`${detail.keyword} · ${detail.rank}위`}
+              text={`${detail.keyword} 지금 ${detail.rank}위 (${detail.growth})`}
+            />
+            <KakaoShareButton
               path={`/trend/${encodeURIComponent(detail.slug)}`}
               title={`${detail.keyword} · ${detail.rank}위`}
               text={`${detail.keyword} 지금 ${detail.rank}위 (${detail.growth})`}

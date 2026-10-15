@@ -45,13 +45,6 @@ function readCookie(request: AuthRequest, name: string) {
 }
 
 export function getUserId(request: AuthRequest): number | null {
-  const rawHeader = headerValue(request, "x-user-id");
-  const header = Array.isArray(rawHeader) ? rawHeader[0] : rawHeader;
-  if (header) {
-    const value = Number.parseInt(header, 10);
-    if (Number.isFinite(value) && value > 0) return value;
-  }
-
   const session = readCookie(request, "td-session");
   return session ? verifySession(session) : null;
 }
