@@ -3028,6 +3028,18 @@ body {
   background: var(--surface-inset);
 }
 
+.kakao-share-btn {
+  color: #191919;
+  border-color: #fee500;
+  background: #fee500;
+}
+
+.kakao-share-btn:hover {
+  color: #191919;
+  border-color: #f5d900;
+  background: #f5d900;
+}
+
 .share-btn:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
