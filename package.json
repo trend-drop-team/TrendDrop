@@ -15,6 +15,7 @@
     "collect": "node --env-file=.env.local pipeline/collect.mjs",
     "rank": "node --env-file=.env.local pipeline/rank-popular.mjs --save",
     "verify:ui": "node scripts/verify-ui.mjs",
+    "test": "node scripts/run-tests.mjs",
     "verify:migrations": "node scripts/verify-migrations.mjs"
   },
   "dependencies": {
