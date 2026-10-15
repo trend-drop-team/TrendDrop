@@ -33,7 +33,7 @@ type Props = {
 const NOW_TICK_MS = 30_000;
 
 const PERIODS: { id: Period; label: string }[] = [
-  { id: "realtime", label: "실시간" },
+  { id: "realtime", label: "지금" },
   { id: "daily", label: "24시간" },
 ];
 
@@ -564,10 +564,10 @@ export default function RankingBoard({ snapshots, daily, categories, latestColle
             aria-pressed={live && isRealtime}
             onClick={handleLiveToggle}
             disabled={!isRealtime}
-            title={isRealtime ? "자동 재생 켜기/끄기" : "24시간 집계는 자동 재생을 쓰지 않습니다"}
+            title={isRealtime ? "LIVE 켜기/끄기" : "24시간 집계는 LIVE를 쓰지 않습니다"}
           >
             <span className="live-dot" aria-hidden="true" />
-            자동 재생
+            LIVE
           </button>
 
           <div className="share-actions">
@@ -599,7 +599,7 @@ export default function RankingBoard({ snapshots, daily, categories, latestColle
               <span className="board-sep" aria-hidden="true">
                 ·
               </span>
-              {playing ? "과거 재생 중" : live ? "자동 재생 중" : "일시정지"}
+              {playing ? "과거 재생 중" : live ? "LIVE 중" : "일시정지"}
             </>
           ) : (
             <>
