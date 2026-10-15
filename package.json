@@ -8,6 +8,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
+    "test": "tsx --test server/http/auth.test.ts",
     "db:generate": "node --env-file=.env.local node_modules/drizzle-kit/bin.cjs generate --config=drizzle.config.mjs",
     "db:push": "node --env-file=.env.local node_modules/drizzle-kit/bin.cjs push --config=drizzle.config.mjs",
     "db:migrate": "node --env-file=.env.local node_modules/drizzle-kit/bin.cjs migrate --config=drizzle.config.mjs",
