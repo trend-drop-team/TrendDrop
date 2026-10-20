@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { parse, EXCLUDED_GALLERIES } from "./sources/dcbest.mjs";
+import { parse, mergePages, EXCLUDED_GALLERIES } from "./sources/dcbest.mjs";
 
 const link = (no, title) =>
   `<a href="/board/view/?id=dcbest&no=${no}" view-msg ="">${title}</a>`;
@@ -26,4 +26,19 @@ test("갤러리 태그 없는 글은 그대로 들어온다", () => {
 
 test("EXCLUDED_GALLERIES에 6개가 모두 들어 있다", () => {
   assert.deepEqual([...EXCLUDED_GALLERIES].sort(), ["국갤", "군갤", "더갤", "새갤", "잡갤", "중갤"]);
+});
+
+test("mergePages: 페이지 간 같은 text는 먼저 나온 것만 남긴다", () => {
+  const a = { source: "dcbest", unit: "title", text: "a" };
+  const b = { source: "dcbest", unit: "title", text: "b" };
+  const c = { source: "dcbest", unit: "title", text: "c" };
+  const b2 = { ...b, meta: { gallery: "x" } };
+  assert.deepEqual(mergePages([[a, b], [b2, c]]), [a, b, c]);
+});
+
+test("mergePages: 빈 페이지가 섞여도 동작한다", () => {
+  const a = { source: "dcbest", unit: "title", text: "a" };
+  const c = { source: "dcbest", unit: "title", text: "c" };
+  assert.deepEqual(mergePages([[], [a], [], [a, c]]), [a, c]);
+  assert.deepEqual(mergePages([]), []);
 });
