@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { CATEGORY_MULT, termMultiplierFor } from "./issues.mjs";
+import { CATEGORY_MULT, termMultiplierFor, cleanItem } from "./issues.mjs";
 import { ISSUE_CATEGORIES } from "./issue-prompt.mjs";
 
 const extractions = new Map([
@@ -31,4 +31,32 @@ test("창 안에 없는 이름은 ×1", () => {
 
 test("CATEGORY_MULT 키는 ISSUE_CATEGORIES와 정확히 같다", () => {
   assert.deepEqual([...Object.keys(CATEGORY_MULT)].sort(), [...ISSUE_CATEGORIES].sort());
+});
+
+
+test("xtrends 줄은 키워드를 1개까지만 남기고 해시태그의 표기를 다듬은 이름을 받아들인다", () => {
+  const r = cleanItem(
+    {
+      id: 1,
+      timeliness: "now",
+      keywords: [
+        { name: "축하의 바람이 분다", surface: "#축하의_바람이_분다", category: "유행어·밈", issue: null },
+        { name: "다른것", surface: "다른것", category: "인물", issue: null },
+      ],
+    },
+    { site: "xtrends", text: "#축하의_바람이_분다" },
+  );
+  assert.equal(r.keywords.length, 1);
+  assert.equal(r.keywords[0].name, "축하의 바람이 분다");
+});
+
+test("xtrends: 줄에 없는 이름과 1글자 조각은 버린다", () => {
+  const row = { site: "xtrends", text: "마루 생일" };
+  const r = cleanItem({ id: 1, timeliness: "buzz", keywords: [
+    { name: "마", surface: "마", category: "인물", issue: null },
+    { name: "리쿠", surface: "리쿠", category: "인물", issue: null },
+    { name: "마루", surface: "마루", category: "인물", issue: null },
+  ] }, row);
+  assert.deepEqual(r.keywords.map((k) => k.name), ["마루"]);
+  assert.equal(r.rejected, 2);
 });

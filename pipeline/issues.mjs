@@ -90,7 +90,7 @@ const short = (s, n = 60) => (s.length > n ? s.slice(0, n) + "…" : s);
  *  "비셀 고베 대 전북" → "KBO". 전부 원문에 없는 이름이었다.)
  *
  * 비교는 소문자·공백·기호를 뺀 글자로 한다(GS25 = gs25, SK 아이젠 = sk아이젠).
- *   구글 검색어: 이름과 검색어가 한쪽이 다른 쪽을 포함해야 한다 (gta6 pc → GTA 6)
+ *   구글 검색어·X 트렌드(검색어처럼 취급): 이름과 검색어가 한쪽이 다른 쪽을 포함해야 한다 (gta6 pc → GTA 6)
  *   그 밖: surface(모델이 적은 근거 표현)가 원문에 있어야 하고, 이름은 다음 중 하나여야 한다
  *     - 원문에 그대로 있음
  *     - surface를 포함함 (띄어쓰기·대소문자만 다듬은 경우)
@@ -98,6 +98,8 @@ const short = (s, n = 60) => (s.length > n ? s.slice(0, n) + "…" : s);
  *       단 펼친 이름이 두 단어 이하이고 사건·사고로 끝나지 않을 때만 (주부 → "남편 명의 도용 빚보증 사건" 차단)
  *     - surface와 문자 체계가 다름 — 같은 이름의 한글↔영문 표기 (에이투오 라이트 → A2O LITE)
  */
+/** 구글 검색어·X 트렌드는 검색어처럼 취급한다 — 줄 전체가 키워드 하나 */
+const SEARCH_SITES = ["gtrends", "xtrends"];
 const norm = (s) => s.toLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
 const hasHangul = (s) => /[가-힣]/.test(s);
 const hasLatin = (s) => /[a-z]/i.test(s);
@@ -105,7 +107,9 @@ function isWritten(name, surface, row) {
   const n = norm(name);
   const text = norm(decode(row.text));
   if (!n) return false;
-  if (row.site === "gtrends") return n.includes(text) || text.includes(n);
+  // 검색어·트렌드 줄: 이름과 줄이 한쪽이 다른 쪽을 포함. 2글자 미만 조각("정", "K")은 막는다 — X 트렌드는
+  // 해시태그·문장이 많아 짧은 조각이 통과하기 쉽다
+  if (SEARCH_SITES.includes(row.site)) return [...n].length >= 2 && (n.includes(text) || text.includes(n));
   if (text.includes(n)) return true;
   const sf = norm(surface ?? "");
   if (!sf || !text.includes(sf)) return false;
@@ -152,7 +156,7 @@ export function cleanItem(item, row) {
   let keywords = written
     .map((k) => ({ ...k, name: resolveTitle(k.name.trim()) }))
     .filter((k) => k.name)
-    .slice(0, row.site === "gtrends" ? 1 : 2)
+    .slice(0, SEARCH_SITES.includes(row.site) ? 1 : 2)
     .map((k) => ({ name: k.name.trim(), category: k.category, issue: k.issue?.trim() || null }));
   return {
     timeliness: TIMELINESS.includes(item.timeliness) ? item.timeliness : "buzz",

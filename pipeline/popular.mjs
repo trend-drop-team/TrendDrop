@@ -34,6 +34,7 @@
  * 2026-10-20 항목당 1회 모델로 바꾸면서 구글을 8로 내렸다 — 실측은 PIPELINE.md 참고.
  */
 export const WEIGHTS = {
+  "xtrends|title": 8, // X 트렌드 하나 = 구글 검색어 하나와 같은 값 (이미 집계된 트렌드)
   "gtrends|title": 8, // 검색어 하나 = 커뮤니티 글 2개 값. 항목당 1회 모델에서 20이면 top10의 90%가 구글이었다(2026-10-20)
   "youtube|title": 6,
   "youtube|comment": 1.5,
@@ -45,7 +46,7 @@ export const WEIGHTS = {
 const DEFAULTS = {
   crossBonus: 1.6, // 2+ 소스 교차출현 가산. "여러 곳에서 동시에 말하는 것"이 위로 (v-he는 1.25)
   minMentions: 2, // 1회성 단어 제거
-  keepSources: ["gtrends"], // 이 소스에 있으면 minMentions 무시하고 통과
+  keepSources: ["gtrends", "xtrends"], // 둘 다 이미 집계된 트렌드라 글 1개여도 통과 (minMentions 무시)
   limit: 30,
   windowHours: 6,
 };

@@ -6,7 +6,7 @@
  * (스키마 반영: `npm run db:push` 또는 `npx drizzle-kit push --config=drizzle.config.mjs`)
  *
  * 이 파이프라인이 쓰는 테이블 8개:
- *   sources             수집 소스 마스터 (dcbest/theqoo/instiz/youtube/gtrends 5행 고정) — 데이터만 시드
+ *   sources             수집 소스 마스터 (dcbest/theqoo/instiz/youtube/gtrends/xtrends 6행 고정) — 데이터만 시드
  *   raw_signals         수집 원문 (1시간 버킷). run_id로 어느 collect 실행에서 왔는지 귀속
  *   collection_runs     파이프라인 실행 로그. 이 파이프라인은 두 종류를 남긴다:
  *                          pipeline='collect'  매시간 1건 — raw_signals 소유
@@ -64,17 +64,18 @@ async function assertSchema() {
   schemaChecked = true;
 }
 
-/** 5개 수집 소스 고정 목록. kind가 raw_signals.source_id가 가리키는 대상을 정한다. */
+/** 6개 수집 소스 고정 목록. kind가 raw_signals.source_id가 가리키는 대상을 정한다. */
 const SOURCE_SEED = [
   { name: "디시인사이드 실시간 베스트", kind: "dcbest" },
   { name: "더쿠 핫게시판", kind: "theqoo" },
   { name: "인스티즈 실시간 인기", kind: "instiz" },
   { name: "YouTube Data API", kind: "youtube" },
   { name: "Google Trends RSS", kind: "gtrends" },
+  { name: "X 트렌드 (getdaytrends·trends24 미러)", kind: "xtrends" },
 ];
 
 /**
- * sources 5행 시드(멱등). 테이블은 이미 있다고 가정(assertSchema)하고 데이터만 넣는다.
+ * sources 6행 시드(멱등). 테이블은 이미 있다고 가정(assertSchema)하고 데이터만 넣는다.
  *
  * db/schema.ts의 sources는 name에만 UNIQUE가 있고 kind엔 없다(설계 허점 —
  * 백엔드에 공유 필요). 그래서 ON CONFLICT는 kind가 아니라 name 기준으로 건다.

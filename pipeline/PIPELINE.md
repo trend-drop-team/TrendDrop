@@ -18,7 +18,7 @@ collect.yml — 매시 :05  (cron-job.org → workflow_dispatch)
     │
     └─▶ collect.mjs ─────────────────────────────────────────
           collection_runs 1행 생성 (pipeline='collect')
-          5개 소스 병렬 스크래핑
+          6개 소스 병렬 스크래핑
           raw_signals에 N행 INSERT (run_id = 방금 만든 run)
           collection_runs 그 행 UPDATE (status/raw_signal_count)
 
@@ -85,7 +85,7 @@ rank.yml — 매시 :20  (cron-job.org → workflow_dispatch)
 
 ## 1. 수집 — `collect.mjs`
 
-5개 소스를 `Promise.all`로 동시에 긁는다. 한 소스가 실패해도 나머지는 그대로 저장된다.
+6개 소스를 `Promise.all`로 동시에 긁는다. 한 소스가 실패해도 나머지는 그대로 저장된다.
 
 | 소스      | 대상                                                | 방식          | 저장 단위(unit) |
 | --------- | --------------------------------------------------- | ------------- | --------------- |
@@ -94,8 +94,19 @@ rank.yml — 매시 :20  (cron-job.org → workflow_dispatch)
 | `instiz`  | 인스티즈 실시간 인기                                | HTML 스크래핑 | title           |
 | `youtube` | 인기 급상승 영상 20개 + 상위 8개 영상의 댓글 15개씩 | 공식 Data API | title + comment |
 | `gtrends` | 구글 트렌드 한국 급등검색어 20개                    | 공식 RSS      | title           |
+| `xtrends` | X(트위터) 한국 실시간 트렌드 40~60개 (최대 50)      | 미러 스크래핑 | title           |
 
 > **네이트판은 2026-08-03에 제외했다.** 사연·신변잡기 위주라 트렌드 키워드가 거의 안 나왔다.
+
+### X 트렌드 (2026-10-21)
+
+서비스 목적(유행어·신조어·장소·화제의 콘텐츠)에 가장 가까운 신호가 X 트렌드인데 공식 API는 유료다. 그래서 로그인 없이 한국 트렌드를 보여주는 **공개 미러 두 곳**을 쓴다(`sources/xtrends.mjs`).
+
+- 1순위 `getdaytrends.com/korea/` — `<a class="string" href="/korea/trend/…">` 가 순위 순으로 나온다.
+- 2순위 `trends24.in/korea/` — 첫 `<ol class=trend-card__list>`(가장 최신 시각) 안의 `twitter.com/search?q=…` 링크(속성에 따옴표가 없다). 둘째 목록부터는 과거 시각이라 안 쓴다.
+- **폴백**: 1순위가 실패하거나 0개면 2순위를 시도한다. 둘 다 실패하면 빈 배열이 아니라 throw — `collect.mjs`가 소스별 오류로 보고한다.
+- **깨질 수 있다.** 제3자 미러라 마크업이 바뀌거나 막힐 수 있다. 우리는 사이트 소유자가 아니므로 스크래핑은 매시간 1회(cron)뿐이다.
+- 가중치는 구글 검색어와 같은 8이고(`popular.mjs`), 이미 집계된 트렌드라 글 1개여도 통과한다(`keepSources`). 추출 단계에서도 검색어처럼 줄 전체가 키워드 하나다.
 
 ### 디시 뉴스 갤러리 제외 (2026-10-20)
 
@@ -117,7 +128,7 @@ rank.yml — 매시 :20  (cron-job.org → workflow_dispatch)
 ```
 collection_runs  1행  (pipeline='collect', geo='KR', bucket_at=이번 정시)
 raw_signals      N행  (run_id = 위 run, source_id/source/text/text_hash/video_id/meta/bucket_at/captured_at)
-sources          최초 1회만 5행 시드 (dcbest/theqoo/instiz/youtube/gtrends)
+sources          최초 1회만 6행 시드 (dcbest/theqoo/instiz/youtube/gtrends/xtrends)
 ```
 
 수집한 행은 **1시간 버킷**(정시로 내림)으로 묶인다. `UNIQUE(source_id, text_hash, bucket_at)`이라 같은 시간대·같은 소스의 같은 글은 무시되지만, **디시 실베에 3시간 머문 글은 3개 버킷에 3번 저장**된다 — 체류시간이 자연스럽게 점수에 반영되는 구조.
@@ -184,6 +195,7 @@ Lite는 같은 입력에도 실행마다 답이 조금씩 달라서 정답 세�
 | v9~v13 | 사건 속 인물 이름 금지, 빈말 요약 금지, 그룹=인물, 현직 직함 → 이름 | 첫 운영 실행들 (`인천 흉기난동 제압 시민`, `대한민국 대통령`) |
 | **v14** | **적힌 이름만 뽑고 없으면 비움. "이미 쓰는 이름" 목록 제거. `surface` + 코드 검증** | 이름을 지어내다 엉뚱한 글끼리 합쳐짐 (`한국 중학생`, `KBO`) |
 | v15 | 사건 속 사람 이야기여도 적힌 "지역+사건" 표현은 뽑음 | v14가 `인천 흉기난동에 20대 딸…`을 비움 |
+| v16 | X 트렌드 줄 처리: 해시태그는 `#` 제거·밑줄→띄어쓰기, 대상+상황이면 대상만(`마루 생일` → 마루), 대상 없는 구호는 유행어·밈 | `xtrends` 소스 추가 (`#축하의_바람이_분다`, `안겹침`) |
 
 ---
 
@@ -350,11 +362,11 @@ saveTrendSnapshots() → trend_snapshots에 top10 INSERT
 finishRun()  → collection_runs UPDATE (keyword_count 등)
 ```
 
-### `sources` — 소스 마스터 (5행 고정)
+### `sources` — 소스 마스터 (6행 고정)
 
 | 컬럼                            | 내용                                                                                                                       |
 | ------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| `id`/`name`/`kind`/`created_at` | `dcbest`/`theqoo`/`instiz`/`youtube`/`gtrends`. `kind`엔 DB UNIQUE가 없어(unified 스키마 설계 허점) 시드는 `name`으로 우회 |
+| `id`/`name`/`kind`/`created_at` | `dcbest`/`theqoo`/`instiz`/`youtube`/`gtrends`/`xtrends`. `kind`엔 DB UNIQUE가 없어(unified 스키마 설계 허점) 시드는 `name`으로 우회 |
 
 ### `raw_signals` — 수집 원문
 
@@ -473,8 +485,9 @@ HOURS_BACK=48 node --env-file=.env.local pipeline/backfill-issues.mjs --save --r
 
 | 파일                   | 역할                                    | API 호출 |
 | ---------------------- | --------------------------------------- | -------- |
-| `collect.mjs`          | 5소스 병렬 수집 → `raw_signals`         | YouTube  |
+| `collect.mjs`          | 6소스 병렬 수집 → `raw_signals`         | YouTube  |
 | `sources/*.mjs`        | 소스별 스크래퍼                         |          |
+| `sources/xtrends.mjs`  | X 트렌드 미러 두 곳 스크래핑·폴백 (1장) |          |
 | `issues.mjs`           | 추출·코드 검증·검수·재집계 (2·4장)      | ✅       |
 | `issue-prompt.mjs`     | 추출·검수 프롬프트, `PROMPT_VERSION`    |          |
 | `gemini.mjs`           | Gemini 호출·모델 순서·예비 전환         | ✅       |
