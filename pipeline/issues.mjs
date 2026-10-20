@@ -3,7 +3,7 @@
  * 코드가 소스 가중치로 점수를 매긴 뒤, 상위 후보를 LLM이 한 번 더 검수한다.
  *
  *   1. 추출  새 글만 Lite에 50줄씩 (text_extractions에 text_hash 단위 캐시)
- *   2. 점수  popular.mjs rankPopular — 추출된 이름 × 소스 가중치 × 시의성 배율 × 교차 보너스
+ *   2. 점수  popular.mjs rankPopular — 추출된 이름 × 소스 가중치 × 시의성 배율 × 카테고리 계수 × 교차 보너스
  *   3. 검수  상위 25개를 3번 동시에 물어 과반 판단만 적용: 일반어 빼기(drop) + 같은 대상 묶기(merge)
  *            묶은 결과만 이름 사전(keyword_aliases)에 쌓는다. drop은 맥락 의존이라 저장 안 함
  *   4. 재집계 묶인 이름을 합쳐 다시 점수를 내고 top-N
@@ -32,6 +32,50 @@ export { PROMPT_VERSION };
 
 /** 시의성 배율. AI는 단계만 고르고 숫자는 여기서 정한다(모델은 실시간 인기를 모른다). */
 export const TIMELINESS_MULT = { now: 1.0, buzz: 0.7, evergreen: 0.3 };
+
+/**
+ * 카테고리 계수 (2026-10-20, B안). 서비스 목적이 유행어·장소·화제의 콘텐츠라 그쪽으로 기울인다.
+ * 실측(최근 24시간 7개 시간대 top10 누적): 전부 ×1이면 인물 25·기업 21·스포츠 12·작품 3 →
+ * 이 계수로 인물 29·작품 20·기업 9·사건 8·스포츠 2. 더 강하게(인물 0.6/기업 0.4/스포츠 0.4/정치 0.3) 하면
+ * 하위권이 5~7점으로 떨어져 구글 검색어 단독 항목이 채워서 보류.
+ * 인물에는 정치인뿐 아니라 아이돌·방송인·판다가 다 들어가서 약하게만 깎는다. 카테고리는
+ * text_extractions에 이미 있으므로 숫자만 바꾸면 API 재호출 없이 반영된다.
+ */
+export const CATEGORY_MULT = {
+  "유행어·밈": 2.0,
+  "작품·콘텐츠": 1.5,
+  "사건·사고": 1.0,
+  "재난·속보": 1.0,
+  "인물": 0.8,
+  "기업·주식": 0.6,
+  "스포츠": 0.6,
+  "정치·사회": 0.5,
+};
+
+/** 키워드별 카테고리 계수. 글 하나에 키워드가 2개면 카테고리가 다를 수 있어 키워드 단위로 곱한다. */
+/**
+ * 키워드별 카테고리 계수. 이름의 **대표 카테고리**(창 안 글에서 가장 많이 붙은 것) 하나로 곱한다 —
+ * Lite가 같은 이름에 글마다 다른 카테고리를 붙이는 일이 있어서(두쫀쿠: 유행어·밈 / 기업·주식),
+ * 글마다 곱하면 계수가 섞여 추출 흔들림이 순위에 그대로 들어간다. 별칭으로 합쳐진 이름은 한 표로 센다.
+ */
+export function termMultiplierFor(extractions, aliases) {
+  const canon = (n) => aliases.get(n) ?? n;
+  const votes = new Map(); // 이름 → Map<카테고리, 표>
+  for (const e of extractions.values()) {
+    for (const k of e.keywords) {
+      const name = canon(k.name);
+      const m = votes.get(name) ?? new Map();
+      m.set(k.category, (m.get(k.category) ?? 0) + 1);
+      votes.set(name, m);
+    }
+  }
+  const mult = new Map();
+  for (const [name, m] of votes) {
+    const top = [...m.entries()].sort((a, b) => b[1] - a[1])[0][0];
+    mult.set(name, CATEGORY_MULT[top] ?? 1);
+  }
+  return (term) => mult.get(term) ?? 1;
+}
 
 const BATCH = 50; // 한 번에 보내는 줄 수. Lite 기준 50줄에 20~40초
 // 검수에 올리는 후보 수. 같은 대상이 다른 말로 쪼개져 있으면(인천 칼부림 / 인천 흉기난동)
@@ -223,6 +267,7 @@ function score(rows, extractions, aliases, dropped, limit, windowHours) {
     termsOf: (row) =>
       (extractions.get(row.textHash)?.keywords ?? []).map((k) => canon(k.name)).filter((n) => !dropped.has(n)),
     rowMultiplier: (row) => TIMELINESS_MULT[extractions.get(row.textHash)?.timeliness] ?? 1,
+    termMultiplier: termMultiplierFor(extractions, aliases),
   });
 }
 
