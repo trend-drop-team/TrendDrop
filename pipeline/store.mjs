@@ -6,7 +6,7 @@
  * (스키마 반영: `npm run db:push` 또는 `npx drizzle-kit push --config=drizzle.config.mjs`)
  *
  * 이 파이프라인이 쓰는 테이블 8개:
- *   sources             수집 소스 마스터 (dcbest/theqoo/instiz/youtube/gtrends 5행 고정) — 데이터만 시드
+ *   sources             수집 소스 마스터 (dcbest/theqoo/instiz/youtube/gtrends/xtrends 6행 고정) — 데이터만 시드
  *   raw_signals         수집 원문 (1시간 버킷). run_id로 어느 collect 실행에서 왔는지 귀속
  *   collection_runs     파이프라인 실행 로그. 이 파이프라인은 두 종류를 남긴다:
  *                          pipeline='collect'  매시간 1건 — raw_signals 소유
@@ -22,6 +22,8 @@
  *
  * env: DATABASE_URL. 없으면 호출 측에서 저장을 스킵한다.
  */
+import { EXCLUDED_GALLERIES } from "./sources/dcbest-galleries.mjs"; // 의존성 없는 상수 모듈 (스크래퍼는 import하지 않는다)
+
 // postgres는 지연 import — DB를 안 쓰는 경로(스크래핑만)에선 패키지 없어도 동작.
 let sqlInstance = null;
 
@@ -62,17 +64,18 @@ async function assertSchema() {
   schemaChecked = true;
 }
 
-/** 5개 수집 소스 고정 목록. kind가 raw_signals.source_id가 가리키는 대상을 정한다. */
+/** 6개 수집 소스 고정 목록. kind가 raw_signals.source_id가 가리키는 대상을 정한다. */
 const SOURCE_SEED = [
   { name: "디시인사이드 실시간 베스트", kind: "dcbest" },
   { name: "더쿠 핫게시판", kind: "theqoo" },
   { name: "인스티즈 실시간 인기", kind: "instiz" },
   { name: "YouTube Data API", kind: "youtube" },
   { name: "Google Trends RSS", kind: "gtrends" },
+  { name: "X 트렌드 (getdaytrends·trends24 미러)", kind: "xtrends" },
 ];
 
 /**
- * sources 5행 시드(멱등). 테이블은 이미 있다고 가정(assertSchema)하고 데이터만 넣는다.
+ * sources 6행 시드(멱등). 테이블은 이미 있다고 가정(assertSchema)하고 데이터만 넣는다.
  *
  * db/schema.ts의 sources는 name에만 UNIQUE가 있고 kind엔 없다(설계 허점 —
  * 백엔드에 공유 필요). 그래서 ON CONFLICT는 kind가 아니라 name 기준으로 건다.
@@ -206,6 +209,7 @@ export async function insertRawItems(rows, runId) {
  * 과거로 더 뻗지 않고 표본만 줄어든다 — "6시간 창"이 실제로 6시간을 뜻하게 된다.
  * 기준점은 now()가 아니라 max(bucket_at): 이번 시각 수집이 실패해도 직전 데이터로
  * 랭킹은 나오게 하되, 호출 측이 기준 시각을 출력해 오래된 데이터를 알아채게 한다.
+ * 디시 뉴스 갤러리(EXCLUDED_GALLERIES)는 여기서 거른다 — 수집 단계 제외 전에 쌓인 과거 글도 순위에서 빠진다.
  */
 export async function loadRecentItems(hours = 6, { offsetHours = 0 } = {}) {
   const s = await sql();
@@ -218,6 +222,7 @@ export async function loadRecentItems(hours = 6, { offsetHours = 0 } = {}) {
                       - make_interval(hours => ${hours + offsetHours})
       AND r.bucket_at <= (SELECT max(bucket_at) FROM raw_signals)
                       - make_interval(hours => ${offsetHours})
+      AND NOT (src.kind = 'dcbest' AND COALESCE(r.meta->>'gallery', '') = ANY(${EXCLUDED_GALLERIES}::text[]))
     ORDER BY r.bucket_at, r.id`;
   return rows.map((r) => ({
     site: r.site,
