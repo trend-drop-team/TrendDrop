@@ -53,7 +53,7 @@ const oauthProviders = {
   },
 } as const;
 
-function frontendRedirect(value: unknown) {
+export function frontendRedirect(value: unknown) {
   const fallback = frontendOrigin?.[0] ?? DEV_ORIGIN;
   if (typeof value !== "string") return `${fallback}/login`;
   try {
@@ -61,6 +61,11 @@ function frontendRedirect(value: unknown) {
     if (frontendOrigin?.includes(url.origin) || (!frontendOrigin?.length && url.origin === DEV_ORIGIN)) return url.toString();
   } catch { /* invalid redirect falls back safely */ }
   return `${fallback}/login`;
+}
+
+export function oauthStateError(stateCookie: string | undefined, requestState: unknown) {
+  const [state] = decodeURIComponent(stateCookie ?? "").split(".");
+  return !state || state !== requestState ? "invalid oauth state" : null;
 }
 
 app.get("/api/auth/me", async (request, response, next) => {
@@ -98,8 +103,8 @@ app.get("/api/auth/:provider/callback", async (request, response, next) => {
     const provider = oauthProviders[providerName];
     if (!provider) { response.status(404).send("unsupported provider"); return; }
     const stateCookie = request.headers.cookie?.match(/(?:^|;\s*)td-oauth-state=([^;]+)/)?.[1];
-    const [state] = decodeURIComponent(stateCookie ?? "").split(".");
-    if (!state || state !== request.query.state) { response.status(400).send("invalid oauth state"); return; }
+    const stateError = oauthStateError(stateCookie, request.query.state);
+    if (stateError) { response.status(400).send(stateError); return; }
     const redirectTarget = frontendRedirect(Buffer.from(decodeURIComponent(stateCookie ?? "").split(".")[1] ?? "", "base64url").toString("utf8"));
     if (typeof request.query.error === "string") {
       response.clearCookie("td-oauth-state");
@@ -216,4 +221,6 @@ app.use((error: unknown, request: Request, response: Response, _next: NextFuncti
   response.status(500).json({ error: "Internal server error" });
 });
 
-app.listen(port, () => console.log(`TrendDrop API listening on http://localhost:${port}`));
+if (process.env.NODE_ENV !== "test") {
+  app.listen(port, () => console.log(`TrendDrop API listening on http://localhost:${port}`));
+}

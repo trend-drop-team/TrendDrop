@@ -7,6 +7,7 @@
     "start:backend": "tsx backend/server.ts",
     "build": "next build",
     "start": "next start",
+    "test": "node --import tsx --import ./test/setup.ts --test test/auth-watchlist.test.ts",
     "lint": "eslint .",
     "db:generate": "node --env-file=.env.local node_modules/drizzle-kit/bin.cjs generate --config=drizzle.config.mjs",
     "db:push": "node --env-file=.env.local node_modules/drizzle-kit/bin.cjs push --config=drizzle.config.mjs",
