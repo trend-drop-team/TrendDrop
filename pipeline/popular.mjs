@@ -39,6 +39,7 @@ export const WEIGHTS = {
   "youtube|title": 6,
   "youtube|comment": 1.5,
   "dcbest|title": 4,
+  // 아래 두 줄: 2026-10-21부터 수집·로더에서 제외(excluded-sources.mjs). 값은 복귀 대비 유지.
   "theqoo|title": 4,
   "instiz|title": 4,
 };

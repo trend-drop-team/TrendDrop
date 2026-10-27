@@ -18,7 +18,7 @@ collect.yml — 매시 :05  (cron-job.org → workflow_dispatch)
     │
     └─▶ collect.mjs ─────────────────────────────────────────
           collection_runs 1행 생성 (pipeline='collect')
-          6개 소스 병렬 스크래핑
+          6개 소스 중 4개 활성(더쿠·인스티즈 제외) 병렬 스크래핑
           raw_signals에 N행 INSERT (run_id = 방금 만든 run)
           collection_runs 그 행 UPDATE (status/raw_signal_count)
 
@@ -85,13 +85,13 @@ rank.yml — 매시 :20  (cron-job.org → workflow_dispatch)
 
 ## 1. 수집 — `collect.mjs`
 
-6개 소스를 `Promise.all`로 동시에 긁는다. 한 소스가 실패해도 나머지는 그대로 저장된다.
+6개 소스 중 4개가 활성이고(더쿠·인스티즈는 2026-10-21 제외), 활성 소스를 `Promise.all`로 동시에 긁는다. 한 소스가 실패해도 나머지는 그대로 저장된다.
 
 | 소스      | 대상                                                | 방식          | 저장 단위(unit) |
 | --------- | --------------------------------------------------- | ------------- | --------------- |
 | `dcbest`  | 디시인사이드 실시간 베스트 1~3페이지 (최대 150개)   | HTML 스크래핑 | title           |
-| `theqoo`  | 더쿠 핫게시판                                       | HTML 스크래핑 | title           |
-| `instiz`  | 인스티즈 실시간 인기                                | HTML 스크래핑 | title           |
+| `theqoo`  | 더쿠 핫게시판 — **제외(2026-10-21)**                | HTML 스크래핑 | title           |
+| `instiz`  | 인스티즈 실시간 인기 — **제외(2026-10-21)**         | HTML 스크래핑 | title           |
 | `youtube` | 인기 급상승 영상 50개 + 상위 20개 영상의 댓글 15개씩 | 공식 Data API | title + comment |
 | `gtrends` | 구글 트렌드 한국 급등검색어 20개                    | 공식 RSS      | title           |
 | `xtrends` | X(트위터) 한국 실시간 트렌드 40~60개 (최대 50)      | 미러 스크래핑 | title           |
@@ -129,6 +129,15 @@ rank.yml — 매시 :20  (cron-job.org → workflow_dispatch)
 | 군갤   | 27%       | 27%    |
 
 해갤(7%/44%)은 스포츠 기사라 경계선이지만 남긴다. 목록은 `sources/dcbest-galleries.mjs`의 `EXCLUDED_GALLERIES` 한 곳에 있다(의존성 없는 상수 파일 — store.mjs가 스크래퍼를 import하지 않게). **수집 단계(`parse`)에서 건너뛰고, 랭킹 로더(`store.mjs` `loadRecentItems`)에서도 거른다.** raw_signals는 지우지 않으므로 수집 제외 전에 쌓인 과거 글은 순위에서만 빠지고, 목록을 바꾸면 되돌릴 수 있다.
+
+### 더쿠·인스티즈 제외 (2026-10-21)
+
+서비스 목적(유행어·장소·화제의 콘텐츠)에 맞춰 소스를 줄이기로 해서 더쿠·인스티즈를 수집과 랭킹에서 뺐다. 목록은 `sources/excluded-sources.mjs`의 `EXCLUDED_SOURCES` 한 곳(의존성 없는 상수 파일)이다.
+
+- **수집**: `collect.mjs`가 `activeAdapters(ADAPTERS, EXCLUDED_SOURCES)`(`adapters.mjs`)로 걸러 실행한다. 어댑터 목록·import는 남겨 뒀다.
+- **랭킹**: `store.mjs` `loadRecentItems`가 `src.kind`가 제외 목록인 행을 거른다. 이미 쌓인 과거 행도 순위에서 빠진다.
+- 소스 파일(`sources/theqoo.mjs`, `instiz.mjs`)·`raw_signals`·`SOURCE_SEED`·`popular.mjs` WEIGHTS 값은 그대로다.
+- **되돌리는 법**: `EXCLUDED_SOURCES`에서 이름을 빼면 수집·랭킹이 모두 복귀한다.
 
 ### 이 단계에서 DB에 쓰는 것
 
@@ -492,7 +501,7 @@ HOURS_BACK=48 node --env-file=.env.local pipeline/backfill-issues.mjs --save --r
 
 | 파일                   | 역할                                    | API 호출 |
 | ---------------------- | --------------------------------------- | -------- |
-| `collect.mjs`          | 6소스 병렬 수집 → `raw_signals`         | YouTube  |
+| `collect.mjs`          | 활성 4소스 병렬 수집 → `raw_signals`    | YouTube  |
 | `sources/*.mjs`        | 소스별 스크래퍼                         |          |
 | `sources/xtrends.mjs`  | X 트렌드 미러 두 곳 스크래핑·폴백 (1장) |          |
 | `issues.mjs`           | 추출·코드 검증·검수·재집계 (2·4장)      | ✅       |
