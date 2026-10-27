@@ -16,7 +16,7 @@ test("같은 영상·같은 시간대의 제목+댓글 반복은 1번만 센다"
   ];
   const a = find(rankPopular(rows, { termsOf, minMentions: 1 }), "A");
   assert.equal(a.mentions, 1);
-  assert.equal(a.rawScore, 6);
+  assert.equal(a.rawScore, 3); // 유튜브 제목 가중치
 });
 
 test("같은 영상이 두 시간대에 있어도 mentions 1", () => {
@@ -50,9 +50,10 @@ test("dcbest 다른 글 2개면 mentions 2", () => {
   assert.equal(res.meta.deduped, 0);
 });
 
-test("gtrends 행 1개의 rawScore는 8", () => {
+test("gtrends 행 1개의 rawScore는 8 (최소 언급 면제는 2026-10-27 없어져 minMentions를 낮춰 확인)", () => {
   const rows = [row({ site: "gtrends", kind: "title", text: "q", bucketAt: T1 })];
-  assert.equal(find(rankPopular(rows, { termsOf }), "A").rawScore, 8);
+  assert.equal(find(rankPopular(rows, { termsOf, minMentions: 1 }), "A").rawScore, 8);
+  assert.equal(find(rankPopular(rows, { termsOf }), "A"), undefined); // 글 1개면 기본 규칙(2개 이상)에 걸린다
 });
 
 test("다른 소스의 같은 text·textHash는 합치지 않는다 (mentions 2, breadth 2)", () => {
@@ -66,8 +67,8 @@ test("다른 소스의 같은 text·textHash는 합치지 않는다 (mentions 2,
 test("gtrends 같은 textHash는 최신 meta로 계산한다 (입력 순서 무관)", () => {
   const old = row({ site: "gtrends", kind: "title", text: "q", textHash: "hq", bucketAt: T1, meta: { approxTraffic: "100+" } });
   const next = row({ site: "gtrends", kind: "title", text: "q", textHash: "hq", bucketAt: T2, meta: { approxTraffic: "10000+" } });
-  const fwd = find(rankPopular([old, next], { termsOf }), "A").rawScore;
-  const rev = find(rankPopular([next, old], { termsOf }), "A").rawScore;
+  const fwd = find(rankPopular([old, next], { termsOf, minMentions: 1 }), "A").rawScore;
+  const rev = find(rankPopular([next, old], { termsOf, minMentions: 1 }), "A").rawScore;
   assert.ok(fwd > 8);
   assert.equal(rev, fwd);
 });
@@ -94,7 +95,7 @@ test("같은 영상의 댓글 행이 제목 행보다 먼저 와도 제목 점�
   const comment = row({ site: "youtube", kind: "comment", text: "A 최고", textHash: "hc", videoId: "v1", bucketAt: T1 });
   const title = row({ site: "youtube", kind: "title", text: "A MV", textHash: "ht", videoId: "v1", bucketAt: T1 });
   const res = rankPopular([comment, title], { termsOf, minMentions: 1 });
-  assert.equal(find(res, "A").rawScore, 6);
+  assert.equal(find(res, "A").rawScore, 3); // 제목 가중치(댓글 0.75가 아니라)
   assert.equal(find(res, "A").mentions, 1);
 });
 
