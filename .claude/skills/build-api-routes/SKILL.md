@@ -41,6 +41,7 @@ if (rows.length === 0) { rows = mockCategories(); source = "mock"; }  // 데이�
 - **붙임**: 테이블이 실제로 비어 있을 수 있는 게 알려진 정상 상태(예: 파이프라인이 아직 안 채움, 방금 띄운 DB)일 때만. `meta.source`를 `"mock"`으로 정직하게 바꾼다.
 - **안 붙임**: "없음"이 요청에 고유한 정답인 경우(예: `getKeywordDetail`처럼 존재하지 않는 슬러그는 `NotFoundError`(404)로 표현 — mock 데모 콘텐츠로 가리면 오히려 혼란스럽다. `getWatchlist`처럼 로그인한 사용자가 저장한 게 없다는 정상 상태를 mock 예시 항목으로 채우면 거짓 정보가 된다).
 - 새 도메인을 추가할 때 이 둘 중 뭐가 맞는지 먼저 판단할 것.
+- **mock 대체는 개발에서만(#87).** 서비스 맨 앞에서 `requireDbUnlessMockAllowed()`(운영인데 DB 미설정이면 throw → 500), mock으로 메우는 분기는 `allowMockFallback()`로 감싼다(`lib/env.ts`). 운영에서 DB가 비어 있으면 빈 결과가 나가고 화면은 빈 상태 안내를 그린다. 화면은 `meta.source === "mock"`이면 `SampleDataBadge`(`app/sample-data-badge.tsx`)를 띄운다.
 - 실제 DB Repository와 Mock Repository는 같은 도메인 타입(예: `CategoryRow[]`, `KeywordDetail`)을 반환하게 맞춘다. Service 쪽에 `if (source === "db")`로 응답 모양 자체가 갈라지는 분기가 생기면 잘못된 신호다.
 
 ### 3. 응답·에러 계약

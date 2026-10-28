@@ -1,5 +1,6 @@
 import Onboarding from "@/app/onboarding";
 import RankingBoard from "@/app/ranking-board";
+import SampleDataBadge from "@/app/sample-data-badge";
 import StaleCacheWriter from "@/app/stale-cache-writer";
 import { fetchApi } from "@/lib/api-client";
 import type { ApiResult } from "@/types/api/common";
@@ -69,6 +70,7 @@ export default async function HomePage() {
     <div className="page-shell">
       <main className="app-main">
         <StaleCacheWriter cacheKey="home" summary={staleSummary} />
+        <SampleDataBadge metas={[categoryResult.meta, timelineResult.meta, dailyResult.meta]} />
         <Onboarding categories={categories} />
 
         <RankingBoard

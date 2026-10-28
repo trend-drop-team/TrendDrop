@@ -3,13 +3,18 @@
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { apiUrl } from "@/lib/api-url";
+import type { ApiResult } from "@/types/api/common";
+import type { CategoryRow } from "@/types/api/category";
+import type { TrendRow } from "@/types/api/trend";
+
 export type PaletteDoc = {
   slug: string;
   title: string;
   description: string;
 };
 
-/** 최신 run의 랭킹 키워드. 서버(layout)에서 API 계층으로 받아 내려준다. */
+/** 최신 run의 랭킹 키워드. 팔레트를 처음 열 때 백엔드 API에서 받아 온다. */
 export type PaletteKeyword = {
   keyword: string;
   slug: string;
@@ -19,9 +24,52 @@ export type PaletteKeyword = {
 
 type Props = {
   docs: PaletteDoc[];
+};
+
+type RemoteData = {
   categories: string[];
   keywords: PaletteKeyword[];
 };
+
+/** 백엔드 한 번 왕복에 허용할 최대 시간 — lib/api-client.ts의 서버 쪽 타임아웃과 맞춘다. */
+const FETCH_TIMEOUT_MS = 8_000;
+
+async function fetchJson<T>(path: string): Promise<T> {
+  const response = await fetch(apiUrl(path), { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
+  if (!response.ok) throw new Error(`API request failed: ${response.status} (${path})`);
+  return response.json() as Promise<T>;
+}
+
+/**
+ * 키워드·카테고리 검색 대상을 백엔드 API에서 받는다.
+ * 레이아웃(모든 요청)에서 미리 받지 않고 팔레트를 처음 열 때만 부른다(#87) —
+ * /docs처럼 데이터가 필요 없는 페이지가 매 요청 DB를 치지 않게.
+ * 하나가 실패해도 다른 쪽은 살리고, 실패한 쪽은 빈 목록으로 둔다.
+ */
+async function loadPaletteData(): Promise<RemoteData> {
+  const [categoryResult, trendResult] = await Promise.allSettled([
+    fetchJson<ApiResult<CategoryRow[]>>("/api/categories"),
+    fetchJson<ApiResult<TrendRow[]>>("/api/trends"),
+  ]);
+
+  if (categoryResult.status === "rejected" && trendResult.status === "rejected") {
+    throw categoryResult.reason;
+  }
+
+  return {
+    categories:
+      categoryResult.status === "fulfilled" ? categoryResult.value.data.map((category) => category.name) : [],
+    keywords:
+      trendResult.status === "fulfilled"
+        ? trendResult.value.data.map((row) => ({
+            keyword: row.keyword,
+            slug: row.slug,
+            category: row.category,
+            rank: row.rank,
+          }))
+        : [],
+  };
+}
 
 type Result =
   | { kind: "keyword"; id: string; label: string; category: string; rank: number; slug: string }
@@ -46,13 +94,23 @@ function optionId(index: number): string {
   return `cmdk-option-${index}`;
 }
 
-export default function CommandPalette({ docs, categories, keywords: rankedKeywords }: Props) {
+const EMPTY_CATEGORIES: string[] = [];
+const EMPTY_KEYWORDS: PaletteKeyword[] = [];
+
+export default function CommandPalette({ docs }: Props) {
   const router = useRouter();
   const pathname = usePathname() ?? "/";
 
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [activeIndex, setActiveIndex] = useState(0);
+  const [remote, setRemote] = useState<RemoteData | null>(null);
+  const [loading, setLoading] = useState(false);
+  // 중복 요청 방지용 — 렌더에 쓰지 않으므로 ref로 둔다.
+  const requestedRef = useRef(false);
+
+  const categories = remote?.categories ?? EMPTY_CATEGORIES;
+  const rankedKeywords = remote?.keywords ?? EMPTY_KEYWORDS;
 
   const inputRef = useRef<HTMLInputElement | null>(null);
   const listRef = useRef<HTMLUListElement | null>(null);
@@ -97,11 +155,28 @@ export default function CommandPalette({ docs, categories, keywords: rankedKeywo
 
   const close = useCallback(() => setOpen(false), []);
 
+  // 이벤트 핸들러(⌘K·검색 버튼)에서만 불린다 — effect 안에서 setState하지 않는다.
+  const ensureData = useCallback(() => {
+    if (requestedRef.current) return;
+    requestedRef.current = true;
+    setLoading(true);
+
+    loadPaletteData()
+      .then((data) => setRemote(data))
+      .catch((error: unknown) => {
+        console.error("[command-palette] 검색 데이터를 불러오지 못했습니다:", error);
+        // 다음에 열 때 다시 시도한다. 그동안은 문서 검색만 동작한다.
+        requestedRef.current = false;
+      })
+      .finally(() => setLoading(false));
+  }, []);
+
   const openPalette = useCallback(() => {
     setQuery("");
     setActiveIndex(0);
     setOpen(true);
-  }, []);
+    ensureData();
+  }, [ensureData]);
 
   /* --- 여는 방법: ⌘K / Ctrl+K, 그리고 헤더 검색 버튼(커스텀 이벤트) --- */
   useEffect(() => {
@@ -239,7 +314,7 @@ export default function CommandPalette({ docs, categories, keywords: rankedKeywo
         </div>
 
         {results.length === 0 ? (
-          <p className="cmdk-empty">일치하는 결과가 없습니다.</p>
+          <p className="cmdk-empty">{loading ? "검색 목록을 불러오는 중입니다…" : "일치하는 결과가 없습니다."}</p>
         ) : (
           <ul className="cmdk-list" id="cmdk-list" role="listbox" aria-label="검색 결과" ref={listRef}>
             {results.map((result, index) => {

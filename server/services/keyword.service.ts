@@ -1,4 +1,5 @@
 import { isDbConfigured } from "@/db";
+import { requireDbUnlessMockAllowed } from "@/lib/env";
 import { clockLabel, nowIso, relativeTime } from "@/lib/utils/date";
 import { normalize } from "@/lib/utils/normalize";
 import { mockHistory, mockKeywordDetail } from "@/mocks/trends/repository";
@@ -16,6 +17,8 @@ import type { HistoryPoint, KeywordDetail } from "@/types/api/keyword";
 
 /** 3.3 GET /api/keywords/:slug — 없는 slug면 NotFoundError(404). */
 export async function getKeywordDetail(slug: string): Promise<ApiResult<KeywordDetail>> {
+  requireDbUnlessMockAllowed();
+
   if (!isDbConfigured()) {
     const detail = mockKeywordDetail(slug);
     if (!detail) throw new NotFoundError(`keyword not found: ${slug}`);
@@ -87,6 +90,8 @@ export async function getKeywordHistory(
   slug: string,
   windowHours: number,
 ): Promise<ApiResult<HistoryPoint[]>> {
+  requireDbUnlessMockAllowed();
+
   if (!isDbConfigured()) {
     const points = mockHistory(slug);
     if (points.every((point) => point.rank === null)) {
