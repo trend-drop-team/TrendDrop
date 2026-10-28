@@ -4,11 +4,10 @@ import Script from "next/script";
 
 import { getDocList } from "@/lib/docs";
 import { SITE_DESCRIPTION, SITE_NAME, SITE_TITLE, siteUrl } from "@/lib/site";
-import { getCategories } from "@/server/services/category.service";
-import { getTrends } from "@/server/services/trend.service";
 
 import AppNav from "./app-nav";
 import CommandPalette from "./command-palette";
+import NavHistory from "./nav-history";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -38,6 +37,8 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
+  // 홈 화면 앱의 상태표시줄 색 — 기본(다크) 테마의 --bg와 같다.
+  themeColor: "#0b0e14",
 };
 
 // 첫 페인트 전에 저장된 테마를 적용해 FOUC(테마 깜빡임)를 막는다.
@@ -59,7 +60,7 @@ const spaceGrotesk = Space_Grotesk({
   variable: "--font-space-grotesk",
 });
 
-export default async function RootLayout({
+export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
@@ -69,17 +70,6 @@ export default async function RootLayout({
     slug,
     title,
     description,
-  }));
-
-  // 커맨드 팔레트는 모든 화면에 떠 있으므로 검색 대상도 여기서 한 번만 받아 내려준다.
-  const [categoryResult, trendResult] = await Promise.all([getCategories(), getTrends()]);
-
-  const categories = categoryResult.data.map((category) => category.name);
-  const paletteKeywords = trendResult.data.map((row) => ({
-    keyword: row.keyword,
-    slug: row.slug,
-    category: row.category,
-    rank: row.rank,
   }));
 
   return (
@@ -98,9 +88,11 @@ export default async function RootLayout({
           strategy="afterInteractive"
         />
         <AppNav />
+        <NavHistory />
         {children}
-        {/* getDocList()는 fs를 쓰는 서버 전용이라 여기서 호출해 props로 내려준다. */}
-        <CommandPalette docs={paletteDocs} categories={categories} keywords={paletteKeywords} />
+        {/* getDocList()는 fs를 쓰는 서버 전용이라 여기서 호출해 props로 내려준다.
+            키워드·카테고리는 레이아웃에서 받지 않는다 — 팔레트를 처음 열 때 백엔드 API로 지연 로딩한다(#87). */}
+        <CommandPalette docs={paletteDocs} />
       </body>
     </html>
   );

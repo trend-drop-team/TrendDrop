@@ -7,6 +7,8 @@
  *   DATABASE_URL 없으면 스크랩만 하고 저장은 스킵(스크래퍼 검증용).
  */
 import { createHash } from "node:crypto";
+import { realpathSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 
 import { collect as dcbest } from "./sources/dcbest.mjs";
 import { collect as theqoo } from "./sources/theqoo.mjs";
@@ -29,7 +31,7 @@ const ADAPTERS = [
 const sha1 = (s) => createHash("sha1").update(s).digest("hex");
 
 /** 1시간 floor 버킷 (UTC ISO). */
-function hourBucket(d) {
+export function hourBucket(d) {
   const x = new Date(d);
   x.setMinutes(0, 0, 0);
   return x.toISOString();
@@ -110,10 +112,14 @@ async function main() {
   }
 }
 
-main()
-  .then(() => closeDb())
-  .catch(async (err) => {
-    console.error("[collect] 오류:", err);
-    await closeDb();
-    process.exit(1);
-  });
+// 테스트가 hourBucket만 import할 때 수집이 돌지 않게 — 직접 실행(node pipeline/collect.mjs)일 때만 main
+const isMain = process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url);
+if (isMain) {
+  main()
+    .then(() => closeDb())
+    .catch(async (err) => {
+      console.error("[collect] 오류:", err);
+      await closeDb();
+      process.exit(1);
+    });
+}

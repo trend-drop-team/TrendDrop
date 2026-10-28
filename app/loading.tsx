@@ -9,7 +9,7 @@ const ROWS = [0, 1, 2, 3, 4, 5];
 
 export default function Loading() {
   return (
-    <div className="page-shell" aria-busy="true" aria-label="불러오는 중">
+    <div className="page-shell" role="status" aria-busy="true" aria-label="불러오는 중">
       <main className="app-main">
         <section className="panel">
           <div className="sk-stack-lg">

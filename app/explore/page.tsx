@@ -1,4 +1,5 @@
 import ExploreView from "@/app/explore-view";
+import SampleDataBadge from "@/app/sample-data-badge";
 import StaleCacheWriter from "@/app/stale-cache-writer";
 import { fetchApi } from "@/lib/api-client";
 import type { ApiResult } from "@/types/api/common";
@@ -19,6 +20,28 @@ export default async function ExplorePage() {
   ]);
 
   const { columns, categories, matrix } = heatmapResult.data;
+
+  // 수집 run이 아직 없으면(운영에서 DB가 비어 있는 새 배포 등) 히트맵·비교를 그리지 않고 안내만 한다.
+  // 운영은 mock으로 메우지 않으므로 이 화면이 그대로 보이는 게 의도된 동작이다(#87).
+  if (categories.length === 0 || columns.length === 0) {
+    return (
+      <div className="page-shell">
+        <main className="app-main">
+          <section className="panel">
+            <div className="panel-heading">
+              <div>
+                <p className="section-kicker">EXPLORE</p>
+                <h3>아직 집계된 트렌드가 없습니다</h3>
+              </div>
+            </div>
+            <div className="empty-state-box">
+              <p>첫 수집이 끝나면 카테고리 히트맵과 키워드 비교가 표시됩니다.</p>
+            </div>
+          </section>
+        </main>
+      </div>
+    );
+  }
 
   // A/B 옵션 = 최신 시점의 랭킹 키워드
   const keywords = (timelineResult.data.at(-1)?.rows ?? []).map((row) => ({
@@ -41,6 +64,7 @@ export default async function ExplorePage() {
     <div className="page-shell">
       <main className="app-main">
         <StaleCacheWriter cacheKey="explore" summary={staleSummary} />
+        <SampleDataBadge metas={[heatmapResult.meta, timelineResult.meta]} />
         <ExploreView
           columns={columns}
           categories={categories}
