@@ -41,7 +41,6 @@
   --radius-sm: 16px;
   --spring: cubic-bezier(0.34, 1.56, 0.64, 1);
   --app-w: 720px;
-  --tabbar-h: 62px;
   --tabbar-gap: 12px;
   --code-bg: #0d1219;
   --code-text: #e6eaf0;
@@ -133,7 +132,7 @@
 .profile-logout { margin-top: 8px; padding: 9px 10px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface-soft); color: var(--text); font: inherit; font-size: 0.82rem; cursor: pointer; }
 .profile-logout:hover { border-color: var(--accent); color: var(--accent); }
 /* 로그인 — 헤더와 탭바를 뺀 남은 높이를 채운다. 모바일은 카드 없이 버튼을 엄지 쪽(아래)에, 641px 이상은 가운데 카드. */
-.login-page-shell { --login-chrome: calc(var(--tabbar-gap) + 72px + var(--tabbar-h) + var(--tabbar-gap) * 2 + env(safe-area-inset-bottom)); display: grid; place-items: center; min-height: calc(100vh - var(--login-chrome)); min-height: calc(100dvh - var(--login-chrome)); padding: 32px 20px; }
+.login-page-shell { --login-chrome: calc(var(--tabbar-gap) * 2 + 72px + env(safe-area-inset-bottom)); display: grid; place-items: center; min-height: calc(100vh - var(--login-chrome)); min-height: calc(100dvh - var(--login-chrome)); padding: 32px 20px; }
 .login-page { display: grid; gap: 36px; width: min(100%, 440px); padding: 44px 40px 36px; border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--surface); box-shadow: var(--shadow); text-align: center; word-break: keep-all; overflow-wrap: break-word; }
 .login-brand-mark { display: grid; place-items: center; width: 56px; height: 56px; margin: 0 auto 22px; border-radius: 18px; background: var(--accent); color: var(--on-accent); font-weight: 900; letter-spacing: -0.08em; }
 .login-page h1 { max-width: none; margin: 10px auto 14px; font-size: clamp(1.7rem, 7.4vw, 2.2rem); line-height: 1.2; letter-spacing: -0.04em; text-wrap: balance; }
@@ -153,7 +152,7 @@
 .login-error { margin: 4px 0 0; color: var(--down); font-size: 0.88rem; }
 .login-legal { font-size: 0.76rem; }
 @media (max-width: 640px) {
-  .login-page-shell { --login-chrome: calc(var(--tabbar-gap) + 62px + var(--tabbar-h) + var(--tabbar-gap) * 2 + env(safe-area-inset-bottom)); place-items: stretch; padding: 28px 10px 16px; }
+  .login-page-shell { --login-chrome: calc(var(--tabbar-gap) * 2 + 62px + env(safe-area-inset-bottom)); place-items: stretch; padding: 28px 10px 16px; }
   .login-page { grid-template-rows: 1fr auto; align-content: space-between; gap: 28px; width: 100%; padding: 0; border: 0; border-radius: 0; background: none; box-shadow: none; }
   .login-intro { align-self: center; }
 }
@@ -1266,56 +1265,150 @@ h3 {
   flex-direction: column;
 }
 
-/* 하단 탭바는 모든 폭에서 보이는 중앙 정렬 플로팅 바다. */
-.app-tabbar {
-  display: flex;
-  position: fixed;
-  bottom: calc(var(--tabbar-gap) + env(safe-area-inset-bottom));
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 40;
-  width: min(var(--app-w), calc(100% - 32px));
-  overflow: hidden;
+/* 햄버거 메뉴 — 헤더 오른쪽 끝, 패널은 헤더 아래로 펼쳐진다. */
+.app-menu {
+  position: relative;
+  flex: none;
+}
+
+.app-menu-button {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  padding: 0;
   border: 1px solid var(--line);
-  border-radius: var(--radius-md);
-  background: var(--header-bg);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
-  box-shadow: var(--shadow);
+  border-radius: 999px;
+  background: var(--surface-soft);
+  color: var(--text);
+  cursor: pointer;
+  transition: border-color 0.2s ease;
 }
 
-.app-tab:focus-visible {
+.app-menu-button:hover {
+  border-color: var(--glow-line);
+}
+
+.app-menu-button:focus-visible,
+.app-menu-item:focus-visible {
   outline: 2px solid var(--accent);
-  outline-offset: -2px;
+  outline-offset: 2px;
 }
 
-.app-tab {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  height: var(--tabbar-h);
-  color: var(--muted);
-  font-size: 0.72rem;
-}
-
-.app-tab-icon {
+.app-menu-bars {
+  position: relative;
   display: block;
+  width: 18px;
+  height: 14px;
+}
+
+.app-menu-bars span {
+  position: absolute;
+  left: 0;
+  width: 100%;
+  height: 2px;
+  border-radius: 2px;
+  background: currentColor;
+  transition: transform 0.22s ease, opacity 0.18s ease;
+}
+
+.app-menu-bars span:nth-child(1) {
+  top: 0;
+}
+
+.app-menu-bars span:nth-child(2) {
+  top: 6px;
+}
+
+.app-menu-bars span:nth-child(3) {
+  top: 12px;
+}
+
+.app-menu-bars.is-open span:nth-child(1) {
+  transform: translateY(6px) rotate(45deg);
+}
+
+.app-menu-bars.is-open span:nth-child(2) {
+  opacity: 0;
+}
+
+.app-menu-bars.is-open span:nth-child(3) {
+  transform: translateY(-6px) rotate(-45deg);
+}
+
+.app-menu-panel {
+  position: absolute;
+  top: calc(100% + 16px);
+  right: 0;
+  display: grid;
+  gap: 4px;
+  width: min(260px, calc(100vw - 32px));
+  padding: 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-md);
+  background: var(--surface-strong);
+  box-shadow: var(--shadow);
+  animation: app-menu-in 0.18s ease-out;
+}
+
+.app-menu-panel[hidden] {
+  display: none;
+}
+
+@keyframes app-menu-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+}
+
+.app-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 14px;
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+
+.app-menu-item:hover {
+  background: var(--surface-soft);
+  color: var(--text);
+}
+
+.app-menu-icon {
+  display: block;
+  flex: none;
   width: 22px;
   height: 22px;
 }
 
-.app-tab-icon svg {
+.app-menu-icon svg {
   width: 100%;
   height: 100%;
   fill: currentColor;
 }
 
-.app-tab.is-active {
+.app-menu-label {
+  min-width: 0;
+}
+
+.app-menu-item.is-active {
+  background: var(--accent-soft);
   color: var(--accent);
   font-weight: 700;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-menu-panel {
+    animation: none;
+  }
+
+  .app-menu-bars span,
+  .app-menu-button {
+    transition: none;
+  }
 }
 
 .app-main {
@@ -2115,7 +2208,6 @@ h3 {
 
 @media (max-width: 640px) {
   .app-header,
-  .app-tabbar,
   .page-shell {
     width: calc(100% - 20px);
   }
@@ -2229,11 +2321,36 @@ h3 {
   .app-brand .brand-name {
     font-size: 0.95rem;
   }
+
+  /* 320px: 햄버거가 더해진 헤더가 넘치지 않도록 컨트롤을 한 단계 줄인다 */
+  .app-header-inner {
+    gap: 6px;
+    padding: 10px 10px;
+  }
+
+  .app-brand .brand-mark {
+    width: 34px;
+    height: 34px;
+    border-radius: 11px;
+  }
+
+  .app-menu-button {
+    width: 36px;
+    height: 36px;
+  }
+
+  .header-search {
+    padding: 8px;
+  }
+
+  .theme-toggle {
+    padding: 8px 10px;
+  }
 }
 
-/* --- 통합 보정: 전역 플로팅 탭바가 콘텐츠를 가리지 않도록 --- */
+/* --- 통합 보정: 하단 탭바가 없으므로 홈 인디케이터 영역만 비운다 --- */
 body {
-  padding-bottom: calc(var(--tabbar-h) + var(--tabbar-gap) * 2 + env(safe-area-inset-bottom));
+  padding-bottom: env(safe-area-inset-bottom);
 }
 
 /* 우리 셸(홈/문서)은 팀의 넓은 .page-shell(1200) 안에서 앱 컬럼(720)으로 좁힌다.

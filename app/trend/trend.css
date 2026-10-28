@@ -12,7 +12,7 @@
   --chart-dot: var(--accent);
 
   --td-page-top: 56px;
-  --td-page-bottom: 128px;
+  --td-page-bottom: 96px;
   --td-section-gap: 44px;
   --td-panel-pad: 30px;
   --td-hero-gap: clamp(48px, 6vw, 76px);
@@ -453,7 +453,7 @@
 @media (max-width: 720px) {
   .td {
     --td-page-top: 24px;
-    --td-page-bottom: 64px;
+    --td-page-bottom: 56px;
     --td-section-gap: 32px;
     --td-panel-pad: 22px;
     --td-hero-gap: 36px;
