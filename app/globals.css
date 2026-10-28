@@ -3173,3 +3173,32 @@ body {
     flex-basis: 100%;
   }
 }
+
+/* "샘플 데이터" 배지(#87) — mock 대체 응답일 때 홈·탐색 상단에 뜬다. 두 테마 모두 토큰만 쓴다. */
+.sample-data-badge {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin: 0 0 20px;
+  padding: 12px 16px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--accent-2-soft);
+  color: var(--muted);
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+
+.sample-data-badge-label {
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--accent-3);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.sample-data-badge-text {
+  min-width: 0;
+}

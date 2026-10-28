@@ -1,4 +1,5 @@
 import { isDbConfigured } from "@/db";
+import { allowMockFallback, requireDbUnlessMockAllowed } from "@/lib/env";
 import { clockLabel, nowIso, relativeTime } from "@/lib/utils/date";
 import { normalize } from "@/lib/utils/normalize";
 import { mockDailyRows, mockTimeline } from "@/mocks/trends/repository";
@@ -166,6 +167,8 @@ function hasData(ingredients: TrendIngredients): boolean {
 export async function getTimeline(
   rowLimit = DEFAULT_ROW_LIMIT,
 ): Promise<ApiResult<TimelineSnapshot[]>> {
+  requireDbUnlessMockAllowed();
+
   let data: TimelineSnapshot[] | null = null;
   let source: "db" | "mock" = isDbConfigured() ? "db" : "mock";
   // 실제 마지막 수집 시각(신선도 표시용) — 타임라인 라벨과 달리 "지금"이 아니라 run 자체의 시각이다.
@@ -179,6 +182,11 @@ export async function getTimeline(
       data = buildTimeline(ingredients.runs, ingredients.rows, rowLimit);
       latestCollectedAt = ingredients.runs[ingredients.runs.length - 1].at.toISOString();
     }
+  }
+
+  // 운영에서는 mock으로 메우지 않는다 — 빈 타임라인이면 화면이 빈 상태 안내를 그린다.
+  if (!data && !allowMockFallback()) {
+    data = [];
   }
 
   if (!data) {
@@ -216,6 +224,8 @@ export async function getTrends(query: TrendQuery = {}): Promise<ApiResult<Trend
   const limit = query.limit ?? DEFAULT_ROW_LIMIT;
 
   if (period === "daily") {
+    requireDbUnlessMockAllowed();
+
     let value: TrendRow[] | null = null;
     let source: "db" | "mock" = isDbConfigured() ? "db" : "mock";
     let latestCollectedAt: string | null = null;
@@ -226,6 +236,11 @@ export async function getTrends(query: TrendQuery = {}): Promise<ApiResult<Trend
         value = buildDailyRows(ingredients.runs, ingredients.rows, limit);
         latestCollectedAt = ingredients.runs[0]?.at.toISOString() ?? null;
       }
+    }
+
+    // 운영에서는 mock으로 메우지 않는다.
+    if (!value && !allowMockFallback()) {
+      value = [];
     }
 
     if (!value) {

@@ -1,4 +1,5 @@
 import { isDbConfigured } from "@/db";
+import { allowMockFallback, requireDbUnlessMockAllowed } from "@/lib/env";
 import { clockLabel, nowIso, relativeTime } from "@/lib/utils/date";
 import { mockHeatmap } from "@/mocks/trends/repository";
 import { dbHeatmapIngredients, type HeatmapIngredients } from "@/server/repositories/heatmap.repository";
@@ -53,6 +54,8 @@ function buildHeatmap({ runs, rows, categoryOrder }: HeatmapIngredients): Heatma
 
 /** 3.5 GET /api/explore/heatmap */
 export async function getHeatmap(windowHours: number): Promise<ApiResult<HeatmapPayload>> {
+  requireDbUnlessMockAllowed();
+
   let data: HeatmapPayload | null = null;
   let source: "db" | "mock" = isDbConfigured() ? "db" : "mock";
 
@@ -63,6 +66,11 @@ export async function getHeatmap(windowHours: number): Promise<ApiResult<Heatmap
     if (ingredients.runs.length > 0 && ingredients.rows.length > 0) {
       data = buildHeatmap(ingredients);
     }
+  }
+
+  // 운영에서는 mock으로 메우지 않는다 — 빈 히트맵이면 탐색 화면이 빈 상태 안내를 그린다.
+  if (!data && !allowMockFallback()) {
+    data = { columns: [], categories: [], matrix: [] };
   }
 
   if (!data) {
