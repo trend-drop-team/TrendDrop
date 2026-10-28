@@ -240,7 +240,7 @@ export async function loadRecentItems(hours = 6, { offsetHours = 0 } = {}) {
  * 비교 기준이 없으므로 언급 횟수로 대신한다. score가 0이었던 적은 없어서(테이블에 안
  * 남으므로) prevScore === 0은 이론상 발생하지 않지만 나눗셈 보호용으로 남겨둔다.
  */
-function formatGrowthRate(score, mentions, prevScore) {
+export function formatGrowthRate(score, mentions, prevScore) {
   if (prevScore == null) return `${mentions ?? 0}회 언급`;
   if (prevScore === 0) return "NEW";
   const pct = Math.round(((score - prevScore) / prevScore) * 100);
