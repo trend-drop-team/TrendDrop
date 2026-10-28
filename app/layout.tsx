@@ -9,6 +9,7 @@ import { getTrends } from "@/server/services/trend.service";
 
 import AppNav from "./app-nav";
 import CommandPalette from "./command-palette";
+import NavHistory from "./nav-history";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -98,6 +99,7 @@ export default async function RootLayout({
           strategy="afterInteractive"
         />
         <AppNav />
+        <NavHistory />
         {children}
         {/* getDocList()는 fs를 쓰는 서버 전용이라 여기서 호출해 props로 내려준다. */}
         <CommandPalette docs={paletteDocs} categories={categories} keywords={paletteKeywords} />
