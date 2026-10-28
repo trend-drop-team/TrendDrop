@@ -29,6 +29,13 @@
       "when": 1791984297029,
       "tag": "0003_drop_keyword_verdicts",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1792505268442,
+      "tag": "0004_add_user_role",
+      "breakpoints": true
     }
   ]
 }

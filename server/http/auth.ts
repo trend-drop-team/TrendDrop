@@ -20,7 +20,7 @@ export function createSession(userId: number) {
   return `${payload}.${signature}`;
 }
 
-function verifySession(value: string): number | null {
+export function verifySession(value: string): number | null {
   const [userId, expiresAt, signature] = value.split(".");
   if (!userId || !expiresAt || !signature || Number(expiresAt) < Date.now() / 1000) return null;
   const payload = `${userId}.${expiresAt}`;

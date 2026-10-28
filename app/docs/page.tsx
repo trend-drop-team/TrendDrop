@@ -1,8 +1,12 @@
 import Link from "next/link";
+import { notFound } from "next/navigation";
 
 import { getDocList } from "@/lib/docs";
+import { currentUserCanViewDocs } from "@/server/http/current-user";
 
-export default function DocsIndexPage() {
+export default async function DocsIndexPage() {
+  if (!(await currentUserCanViewDocs())) notFound();
+
   const docs = getDocList();
 
   return (

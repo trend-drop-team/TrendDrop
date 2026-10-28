@@ -165,6 +165,8 @@ export const users = pgTable(
     // 열어둘 수 있어 nullable로 둔다.
     passwordHash: text("password_hash"),
     name: varchar("name", { length: 80 }),
+    // 'user' | 'admin'. 승격/강등은 코드가 아니라 DB에서 직접 UPDATE한다(#79) — 관리자용 UI는 범위 밖.
+    role: varchar("role", { length: 20 }).notNull().default("user"),
     emailVerifiedAt: timestamp("email_verified_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull().$onUpdate(() => new Date()),
