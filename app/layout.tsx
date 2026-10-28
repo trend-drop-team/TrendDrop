@@ -38,6 +38,8 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
+  // 홈 화면 앱의 상태표시줄 색 — 기본(다크) 테마의 --bg와 같다.
+  themeColor: "#0b0e14",
 };
 
 // 첫 페인트 전에 저장된 테마를 적용해 FOUC(테마 깜빡임)를 막는다.
