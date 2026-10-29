@@ -51,7 +51,8 @@ async function topFiveCard() {
     rows = result.data
       .slice(0, TOP_N)
       .map((row) => ({ rank: row.rank, keyword: row.keyword, growth: row.growth }));
-  } catch {
+  } catch (error) {
+    console.error("[share-card] TOP5 데이터를 불러오지 못했습니다.", error);
     // 순위를 못 받아도 "집계 중" 카드는 나가야 한다 — 빈 이미지보다 낫다.
   }
 

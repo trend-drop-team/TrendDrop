@@ -6,7 +6,7 @@ import { readdirSync, existsSync } from "node:fs";
 import path from "node:path";
 
 const ROOT = process.cwd();
-const SEARCH_DIRS = ["lib", "server", "app"];
+const SEARCH_DIRS = ["lib", "server", "app", "test"];
 
 function walk(dir, acc = []) {
   const full = path.join(ROOT, dir);
@@ -25,4 +25,8 @@ if (files.length === 0) {
   process.exit(0);
 }
 
-execFileSync("npx", ["tsx", "--test", ...files], { cwd: ROOT, stdio: "inherit" });
+execFileSync(
+  process.execPath,
+  ["--import", "tsx", "--import", "./test/setup.ts", "--test", ...files],
+  { cwd: ROOT, stdio: "inherit" }
+);
