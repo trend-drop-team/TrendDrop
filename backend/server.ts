@@ -7,10 +7,11 @@ import { getCategories } from "@/server/services/category.service";
 import { getHeatmap } from "@/server/services/heatmap.service";
 import { getKeywordDetail, getKeywordHistory } from "@/server/services/keyword.service";
 import { getTimeline, getTrends } from "@/server/services/trend.service";
+import { addWatchlistItem, getWatchlist, removeWatchlistItem } from "@/server/services/watchlist.service";
 import { NotFoundError } from "@/server/http/not-found";
 import { parseLimit, parsePeriod, parseRunId, parseWindowHours } from "@/server/http/query";
 import { createSession, getUserId, SESSION_MAX_AGE } from "@/server/http/auth";
-import { getDb } from "@/db";
+import { getDb, isDbConfigured } from "@/db";
 import { users } from "@/db/schema";
 
 const app = express();
@@ -35,6 +36,21 @@ if (!frontendOrigin?.length && process.env.NODE_ENV !== "development") {
 app.disable("x-powered-by");
 app.use(cors({ origin: frontendOrigin?.length ? frontendOrigin : [DEV_ORIGIN], credentials: true }));
 app.use(express.json());
+/**
+ * express.json()이 던지는 에러는 공통 에러 핸들러(500)보다 먼저 잡는다.
+ *
+ * body-parser는 파싱 실패(400)뿐 아니라 너무 큰 본문(413), 지원 안 하는 인코딩(415)도
+ * 같은 방식(status 달린 에러)으로 던진다. SyntaxError만 보면 413/415는 걸러지지 않고
+ * 그대로 500으로 새어 나간다 — status가 있는 4xx는 전부 여기서 받는다.
+ */
+app.use((error: unknown, _request: Request, response: Response, next: NextFunction) => {
+  const status = (error as { status?: unknown })?.status;
+  if (typeof status === "number" && status >= 400 && status < 500) {
+    response.status(status).json({ error: "invalid request body" });
+    return;
+  }
+  next(error);
+});
 
 const oauthProviders = {
   kakao: {
@@ -193,6 +209,68 @@ app.get("/api/keywords/:slug/history", async (request, response, next) => {
       decodeURIComponent(request.params.slug),
       parseWindowHours(typeof value === "string" ? value : null),
     ));
+  } catch (error) { next(error); }
+});
+
+/** 로그인 여부를 확인하고, 아니면 401을 바로 써서 보낸다. 통과 시 userId를 돌려준다. */
+function requireUserId(request: Request, response: Response): number | null {
+  const userId = getUserId(request);
+  if (userId === null) response.status(401).json({ error: "login required" });
+  return userId;
+}
+
+/** 쓰기는 mock으로 대신할 수 없다 — DB 없이 성공을 돌려주면 저장된 척하는 UI가 된다. */
+function requireDbConfigured(response: Response): boolean {
+  if (isDbConfigured()) return true;
+  response.status(500).json({ error: "watchlist requires a database", detail: "DATABASE_URL is not configured" });
+  return false;
+}
+
+/** 3.6 GET /api/watchlist — 저장한 키워드 목록. */
+app.get("/api/watchlist", async (request, response, next) => {
+  try {
+    const userId = requireUserId(request, response);
+    if (userId === null) return;
+    response.json(await getWatchlist(userId));
+  } catch (error) { next(error); }
+});
+
+/** 3.6 POST /api/watchlist { keywordSlug } — 추가(중복은 기존 항목을 그대로 돌려준다). */
+app.post("/api/watchlist", async (request, response, next) => {
+  try {
+    const userId = requireUserId(request, response);
+    if (userId === null) return;
+    if (!requireDbConfigured(response)) return;
+
+    const { keywordSlug } = request.body as { keywordSlug?: unknown };
+    if (typeof keywordSlug !== "string" || keywordSlug.trim() === "") {
+      response.status(400).json({ error: "keywordSlug is required" });
+      return;
+    }
+
+    const slug = keywordSlug.trim();
+    const id = await addWatchlistItem(userId, slug);
+    response.status(201).json({ data: { id, keywordSlug: slug } });
+  } catch (error) { next(error); }
+});
+
+/** 3.6 DELETE /api/watchlist/:id — 삭제. 남의 항목이면 404(존재 여부를 흘리지 않는다). */
+app.delete("/api/watchlist/:id", async (request, response, next) => {
+  try {
+    const userId = requireUserId(request, response);
+    if (userId === null) return;
+    if (!requireDbConfigured(response)) return;
+
+    const itemId = Number.parseInt(request.params.id, 10);
+    if (!Number.isFinite(itemId) || itemId <= 0) {
+      response.status(400).json({ error: "invalid watchlist id" });
+      return;
+    }
+
+    const removed = await removeWatchlistItem(userId, itemId);
+    if (removed === 0) { response.status(404).json({ error: "watchlist item not found" }); return; }
+
+    response.json({ data: { id: itemId } });
   } catch (error) { next(error); }
 });
 

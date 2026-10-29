@@ -15,6 +15,20 @@
       "when": 1788998621950,
       "tag": "0001_add_rising_score",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1791984291765,
+      "tag": "0002_add_issue_extraction",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1791984297029,
+      "tag": "0003_drop_keyword_verdicts",
+      "breakpoints": true
     }
   ]
 }

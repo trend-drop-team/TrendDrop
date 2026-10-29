@@ -1,27 +1,24 @@
 # 쌓인 raw_signals에서 최근 6시간을 꺼내 키워드 순위를 계산하고
 # trend_snapshots에 저장한다. (rank-popular.mjs --save)
 #
-# ★ Claude API를 쓰는 쪽은 여기다. verdict.mjs가 "이게 키워드가 맞나"를 LLM으로 판정한다.
-#   앱이 개발 중인 동안은 비용을 아끼려고 2시간 주기로 둔다.
-#   늦춰도 잃는 게 없다 — 원문(raw_signals)만 있으면 순위는 언제든 다시 계산된다.
-#   (과거 전 구간 재계산: node pipeline/backfill-popular.mjs --reset, API 호출 0회)
-#
-#   나중에 앱을 공개해서 신선도가 중요해지면 cron-job.org의 이 작업 주기를
-#   매시간으로 바꾸면 된다(워크플로 파일은 손댈 필요 없다).
-#   keyword_verdicts 캐시가 데워질수록 신규 판정 건수가 줄어 호출 비용도 함께 내려간다.
-#
+# ★ LLM(Gemini API)을 쓰는 쪽은 여기다. issues.mjs가 글마다 키워드를 뽑고(추출),
+#   상위 후보를 한 번 더 검수(같은 뜻 합치기·일반어 빼기)한다. Google AI Studio 무료 등급.
+#   매시간 호출량: 추출 1~2회(새 글 50개 단위, Lite) + 검수 3회(과반 투표, Flash → Lite)
+#   → 하루 ~100회. Lite 한도(하루 500회) 안이다. 추출 결과는 text_extractions에 캐시돼
+#   창(6시간)이 1시간씩 밀려도 새 글만 다시 묻는다.
+
 # 문서: pipeline/PIPELINE.md 8-3
 
-name: rank (2h)
+name: rank (1h)
 
 on:
-  # 유일한 트리거다. 외부 스케줄러(cron-job.org)가 2시간마다 :20에
+  # 유일한 트리거다. 외부 스케줄러(cron-job.org)가 매시간 :20에
   # workflow_dispatch API를 호출한다.
   # collect(:05)보다 15분 뒤인 이유 — 같은 시각에 걸면 collect가 아직
   # 쓰고 있는 버킷을 rank가 읽어 반쪽짜리 집계가 나온다. 수집 실측이
   # 1분 안쪽이라 15분이면 충분한 여유다.
   #
-  # ★ GitHub의 schedule:은 제거했다. 이 워크플로도 2시간 주기로 걸어뒀지만
+  # ★ GitHub의 schedule:은 제거했다. 예전에 2시간 주기로 걸어뒀지만
   #   실제로는 하루 5.31회(기대 12회)만 실행됐다. 판단 근거와 실측치는
   #   collect.yml 주석과 pipeline/PIPELINE.md 8-3에 있다.
   workflow_dispatch:
@@ -36,7 +33,8 @@ concurrency:
 jobs:
   rank:
     runs-on: ubuntu-latest
-    # LLM 판정이 후보 수만큼 붙어서 collect보다 오래 걸린다.
+    # LLM 호출(추출·검수)이 붙어서 collect보다 오래 걸린다. 평소 1분 안팎,
+    # 프롬프트 버전을 올린 직후엔 창 안 글 ~330개를 새로 뽑아 1~2분.
     timeout-minutes: 20
 
     steps:
@@ -47,7 +45,6 @@ jobs:
           node-version: 22
           cache: npm
 
-      # @anthropic-ai/sdk는 dependencies에 있다(verdict.mjs가 지연 import).
       # devDependencies는 파이프라인이 쓰지 않으므로 제외한다.
       - run: npm ci --omit=dev
 
@@ -57,5 +54,6 @@ jobs:
         env:
           # collect.yml과 같은 Neon direct 문자열.
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          # Google AI Studio에서 발급한 키. gemini.mjs가 SDK 없이 fetch로 호출한다.
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           # YOUTUBE_API_KEY는 필요 없다 — rank는 수집을 하지 않고 DB만 읽는다.

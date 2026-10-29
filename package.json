@@ -7,7 +7,6 @@
     "start:backend": "tsx backend/server.ts",
     "build": "next build",
     "start": "next start",
-    "test": "node --import tsx --import ./test/setup.ts --test test/auth-watchlist.test.ts",
     "lint": "eslint .",
     "db:generate": "node --env-file=.env.local node_modules/drizzle-kit/bin.cjs generate --config=drizzle.config.mjs",
     "db:push": "node --env-file=.env.local node_modules/drizzle-kit/bin.cjs push --config=drizzle.config.mjs",
@@ -15,10 +14,10 @@
     "collect": "node --env-file=.env.local pipeline/collect.mjs",
     "rank": "node --env-file=.env.local pipeline/rank-popular.mjs --save",
     "verify:ui": "node scripts/verify-ui.mjs",
+    "test": "node scripts/run-tests.mjs",
     "verify:migrations": "node scripts/verify-migrations.mjs"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.115.0",
     "cors": "^2.8.6",
     "drizzle-orm": "^0.45.2",
     "express": "^5.2.1",

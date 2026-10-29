@@ -4,8 +4,10 @@
  * meta.videoId 는 추출 단계의 "영상 단위 중복 제거"에 쓰인다.
  */
 const API = "https://www.googleapis.com/youtube/v3";
-const VIDEO_COUNT = 20; // mostPopular 상위 N 영상
-const COMMENT_VIDEOS = 8; // 댓글을 긁을 영상 수 (쿼터 절약)
+// 2026-10-21: 수집량 확대 (20→50, 8→20). 쿼터: videos.list 1 + commentThreads 20 = 시간당 21단위,
+// 하루 24회 ≈ 500단위 / 일 한도 10,000.
+const VIDEO_COUNT = 50; // mostPopular 상위 N 영상 (maxResults 상한 50)
+const COMMENT_VIDEOS = 20; // 댓글을 긁을 영상 수 (쿼터 절약)
 const COMMENTS_PER_VIDEO = 15;
 
 async function getJson(url) {
@@ -68,8 +70,9 @@ export async function collect() {
           });
         }
       }
-    } catch {
-      // 댓글 비활성/오류 영상은 조용히 스킵
+    } catch (e) {
+      // 댓글 비활성 영상은 흔해서 조용히 스킵. 그 밖(쿼터 초과·네트워크)은 로그로 남긴다
+      if (!/commentsDisabled/.test(String(e.message))) console.warn(`youtube 댓글 ${it.id} 실패: ${String(e.message).slice(0, 80)}`);
     }
   }
 

@@ -1,5 +1,5 @@
 /**
- * 수집 오케스트레이션 — 5소스를 병렬 스크래핑해 1시간 버킷으로 raw_signals에 축적.
+ * 수집 오케스트레이션 — 6소스를 병렬 스크래핑해 1시간 버킷으로 raw_signals에 축적.
  * trend-collector src/jobs/collect-sources.ts 에서 이전(SQLite→Postgres).
  *
  * 실행:  node pipeline/collect.mjs
@@ -13,6 +13,7 @@ import { collect as theqoo } from "./sources/theqoo.mjs";
 import { collect as instiz } from "./sources/instiz.mjs";
 import { collect as youtube } from "./sources/youtube.mjs";
 import { collect as gtrends } from "./sources/gtrends.mjs";
+import { collect as xtrends } from "./sources/xtrends.mjs";
 import { insertRawItems, startRun, finishRun, closeDb } from "./store.mjs";
 
 // 네이트판은 2026-08-03에 제외했다 — 사연·신변잡기 위주라 트렌드 키워드가 거의 안 나왔다.
@@ -22,6 +23,7 @@ const ADAPTERS = [
   ["instiz", instiz],
   ["youtube", youtube],
   ["gtrends", gtrends],
+  ["xtrends", xtrends],
 ];
 
 const sha1 = (s) => createHash("sha1").update(s).digest("hex");
