@@ -16,14 +16,14 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
     return errorResponse("forbidden origin", 403);
   }
 
-  const userId = await getActiveUserId(request);
-  if (userId === null) return errorResponse("login required", 401);
-
-  // POST 쪽(app/api/watchlist/route.ts)과 같은 한도 — 쓰기 라우트 전체가 이 레이트리밋을 공유한다(#94).
+  // POST 쪽(app/api/watchlist/route.ts)과 같은 이유로 getActiveUserId(DB 조회)보다 먼저 돈다.
   const rateLimit = checkRateLimit(`watchlist:write:${clientIp(request)}`, WATCHLIST_WRITE_LIMIT, WATCHLIST_WRITE_WINDOW_MS);
   if (!rateLimit.allowed) {
     return NextResponse.json({ error: "too many requests" }, { status: 429, headers: { "retry-after": String(rateLimit.retryAfterSeconds) } });
   }
+
+  const userId = await getActiveUserId(request);
+  if (userId === null) return errorResponse("login required", 401);
 
   if (!isDbConfigured()) {
     return errorResponse("watchlist requires a database", 500, "DATABASE_URL is not configured");

@@ -21,6 +21,10 @@ export function parseAllowedOrigins(): string[] {
  */
 export function isAllowedOrigin(origin: string | null, allowed: string[] = parseAllowedOrigins()): boolean {
   if (allowed.length === 0) {
+    // backend/server.ts의 CORS 가드는 모듈 로드 시 1회만 돌아 `!== "development"`로 막아도
+    // 안전하지만, 이 함수는 매 요청·단위 테스트에서도 호출된다 — `npm test`는 NODE_ENV를
+    // 비워 두므로 같은 조건을 쓰면 테스트가 전부 깨진다. Next.js/Vercel 배포는 `next build`·
+    // `next start`가 NODE_ENV를 항상 정확히 "production"으로 고정하므로 이 비교로 충분하다.
     if (process.env.NODE_ENV === "production") {
       throw new Error("FRONTEND_ORIGIN is not set. 상태변경 라우트의 Origin 검사(#94)가 전체 허용으로 빠집니다.");
     }

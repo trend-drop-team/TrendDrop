@@ -33,12 +33,14 @@ export function checkRateLimit(key: string, limit: number, windowMs: number): Ra
  * x-forwarded-for의 맨 앞 값은 클라이언트가 직접 써서 보낼 수 있어 신뢰할 수 없다 —
  * "X-Forwarded-For: 아무값"을 요청마다 바꿔 보내면 매번 새 레이트리밋 버킷으로 떨어져
  * 한도가 무력화된다. Vercel 같은 단일 신뢰 홉 배포에서는 엣지가 실제로 관찰한 연결 IP를
- * 체인 맨 끝에 덧붙이므로(혹은 x-real-ip로 직접 내려주므로) 그 값만 신뢰한다 —
- * backend/server.ts의 `trust proxy: 1`(신뢰 홉 1개)과 같은 가정이다.
+ * 체인 맨 끝에 덧붙이므로 그 값만 신뢰한다 — backend/server.ts의 `trust proxy: 1`
+ * (신뢰 홉 1개)과 같은 가정이다.
+ *
+ * x-real-ip는 x-forwarded-for와 달리 Vercel이 덧붙이거나 검증해 준다는 보장이 없는
+ * 임의 요청 헤더다 — 그대로 신뢰하면 "X-Real-Ip: 아무값"을 매 요청 바꿔 보내는 것만으로
+ * 레이트리밋이 완전히 무력화된다. 그래서 쓰지 않는다.
  */
 export function clientIp(request: Request): string {
-  const realIp = request.headers.get("x-real-ip");
-  if (realIp) return realIp.trim();
   const forwarded = request.headers.get("x-forwarded-for");
   if (forwarded) {
     const hops = forwarded.split(",").map((value) => value.trim()).filter(Boolean);

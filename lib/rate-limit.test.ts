@@ -43,9 +43,9 @@ test("클라이언트가 x-forwarded-for를 조작해도(맨 앞 값) 레이트�
   assert.equal(clientIp(a), clientIp(b));
 });
 
-test("x-real-ip가 있으면 그 값을 최우선으로 쓴다", () => {
+test("x-real-ip는 신뢰하지 않는다 — 클라이언트가 자유롭게 써서 레이트리밋을 우회할 수 있다 (회귀 가드)", () => {
   const request = new Request("http://example.com", { headers: { "x-real-ip": "9.9.9.9", "x-forwarded-for": "1.2.3.4" } });
-  assert.equal(clientIp(request), "9.9.9.9");
+  assert.equal(clientIp(request), "1.2.3.4");
 });
 
 test("헤더가 없으면 unknown을 돌려준다", () => {
