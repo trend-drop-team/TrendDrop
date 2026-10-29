@@ -1,15 +1,21 @@
 import { cookies } from "next/headers";
 
-import { verifySession } from "@/server/http/auth";
+import { decodeSession } from "@/server/http/auth";
+import { isSessionRevoked } from "@/server/services/session.service";
 import { canViewDocs } from "@/server/services/user.service";
 
 /**
  * getUserId()의 Server Component 버전. Route Handler는 Request를 직접 받지만
  * RootLayout·`/docs` 페이지 같은 Server Component는 Request가 없어 next/headers로 쿠키를 읽는다.
+ * 서명·만료 검증 후 세션 폐기(#94) 여부까지 확인한다.
  */
 export async function getCurrentUserId(): Promise<number | null> {
   const session = (await cookies()).get("td-session")?.value;
-  return session ? verifySession(session) : null;
+  if (!session) return null;
+  const decoded = decodeSession(session);
+  if (!decoded) return null;
+  if (await isSessionRevoked(decoded.userId, decoded.issuedAt)) return null;
+  return decoded.userId;
 }
 
 /**
