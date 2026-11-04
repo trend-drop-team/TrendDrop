@@ -205,10 +205,12 @@ momentum = (최근 구간의 신규 고유 항목 수 + 1) / (이전 구간의 �
 | 역할 | 기본 모델 순서 | 설정 |
 |---|---|---|
 | 새 원문 추출 | gemini-3.5-flash-lite → gemini-3.1-flash-lite | DISCOVERY_EXTRACT_MODELS, 없으면 EXTRACT_MODELS |
-| 발견 통합 편집 | gemini-3.8-flash → gemini-3.7-flash → gemini-3.6-flash | DISCOVERY_EDITOR_MODELS |
+| 발견 통합 편집 | gemini-3.8-flash → gemini-3.7-flash → gemini-3.6-flash → gemini-3.5-flash-lite | DISCOVERY_EDITOR_MODELS, 없으면 REVIEW_MODELS |
 | 기존 종합 검수 | Flash 3종 → gemini-3.5-flash-lite | REVIEW_MODELS |
 
-발견 편집은 자동으로 Lite까지 낮추지 않는다. 유효한 후보가 있으면 기본 성공 호출 수는 `ceil(새 고유 원문 / 50) + 1`이다. 재시도는 별도다. 종합 프로필은 기존 3회 검수와 성공 응답 과반 판단을 유지한다.
+발견 편집도 기존 검수와 같은 대체 모델 목록을 공유한다. 상위 모델이 429(한도 초과), 503(과부하), 시간 초과 등으로 실패하면 다음 모델을 시도하고, 마지막에는 3.5 Flash-Lite를 사용한다. 성공한 시점에 중단하고 실제 사용 모델과 대체 사유를 기록한다. 모든 모델이 실패하면 미검수 순위를 저장하지 않는다. 키·인증·요청 문제인 400/401/403은 즉시 실패한다. `DISCOVERY_EDITOR_MODELS`를 지정하면 그 목록을 사용하므로 필요하면 Lite도 포함한다.
+
+사용자 프로젝트의 운영 기준은 상위 Flash 모델별 일 20회, 3.5 Flash-Lite 일 500회다. 코드는 이 숫자를 자체 차감하지 않고 API의 실제 한도 응답을 기준으로 대체한다. 모델·계정의 한도는 변경될 수 있다. 유효한 후보가 있으면 기본 성공 호출 수는 `ceil(새 고유 원문 / 50) + 1`이고 실패 후 다음 모델 시도는 추가 요청이다. 종합 프로필은 기존 3회 검수와 성공 응답 과반 판단을 유지한다.
 
 API 오류·한도·시간 초과 등은 `withModelFallback`으로 다음 모델을 시도한다. 400/401/403은 바로 실패한다. 요청당 시간 제한은 180초이며 출력은 JSON 스키마를 사용한다. 코드와 무료 등급 주석의 과거 호출량·한도 수치는 현재 운영 보장으로 사용하지 않는다.
 

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { validateEditorial, editDiscovery, projectEditorial } from "./discovery-editor.mjs";
+import { validateEditorial, editDiscovery, projectEditorial, EDITOR_MODELS } from "./discovery-editor.mjs";
 import { rankIssues, extractMissing } from "./issues.mjs";
 import { canonicalTerm } from "./canonical-term.mjs";
 import { buildEvidencePackets } from "./evidence-packets.mjs";
@@ -14,6 +14,29 @@ test("추출 모델 비교에서 다른 모델의 캐시를 재사용하지 않�
 
 const packet = { id: 1, term: "하겐다즈", evidence: [{ id: "cake", text: "하겐다즈 돌케이크 자르기" }] };
 const keep = { id: 1, action: "keep", displayName: "돌케이크", parentEntity: "하겐다즈", phenomenon: "돌케이크 자르기", kind: "product", domain: "food", evidenceIds: ["cake"], reason: "원문에 있는 구체적인 상품", exclusionReason: "none" };
+
+test("상위 모델의 한도·과부하 실패 시 다음 모델을 거쳐 Lite로 대체한다", async () => {
+  assert.deepEqual(EDITOR_MODELS, ["gemini-3.8-flash", "gemini-3.7-flash", "gemini-3.6-flash", "gemini-3.5-flash-lite"]);
+  const calls = [];
+  const result = await editDiscovery([packet], { generate: async (model) => {
+    calls.push(model);
+    if (model === "gemini-3.5-flash-lite") return { decisions: [keep] };
+    throw Object.assign(new Error("일시적 사용 불가"), { status: model === "gemini-3.7-flash" ? 503 : 429 });
+  } });
+  assert.deepEqual(calls, EDITOR_MODELS);
+  assert.equal(result.model, "gemini-3.5-flash-lite");
+  assert.match(result.fallbackReason, /gemini-3.8-flash/);
+});
+
+test("첫 편집 모델이 성공하면 다른 모델을 호출하지 않는다", async () => {
+  const calls = [];
+  const result = await editDiscovery([packet], { models: ["first", "second"], generate: async (model) => {
+    calls.push(model);
+    return { decisions: [keep] };
+  } });
+  assert.deepEqual(calls, ["first"]);
+  assert.equal(result.model, "first");
+});
 
 test("의미 불명과 관측 부재를 구분하고 실제 제외 근거는 유지한다", () => {
   const observed = { id: 1, term: "낯선표현", signals: { discovery: { trendBuckets: 4 } }, evidence: [{ id: "trend", site: "xtrends", trendRank: 13, text: "낯선표현" }] };
