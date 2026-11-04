@@ -1,13 +1,28 @@
 import { NextResponse } from "next/server";
 
 import { isDbConfigured } from "@/db";
-import { getUserId } from "@/server/http/auth";
+import { isAllowedOrigin } from "@/lib/allowed-origins";
+import { checkRateLimit, clientIp } from "@/lib/rate-limit";
+import { getActiveUserId } from "@/server/http/active-user";
 import { errorResponse, handleRouteError } from "@/server/http/errors";
 import { removeWatchlistItem } from "@/server/services/watchlist.service";
 
+const WATCHLIST_WRITE_LIMIT = 20;
+const WATCHLIST_WRITE_WINDOW_MS = 60_000;
+
 /** 3.6 DELETE /api/watchlist/:id — 삭제. 남의 항목이면 404(존재 여부를 흘리지 않는다). */
 export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const userId = getUserId(request);
+  if (!isAllowedOrigin(request.headers.get("origin"))) {
+    return errorResponse("forbidden origin", 403);
+  }
+
+  // POST 쪽(app/api/watchlist/route.ts)과 같은 이유로 getActiveUserId(DB 조회)보다 먼저 돈다.
+  const rateLimit = checkRateLimit(`watchlist:write:${clientIp(request)}`, WATCHLIST_WRITE_LIMIT, WATCHLIST_WRITE_WINDOW_MS);
+  if (!rateLimit.allowed) {
+    return NextResponse.json({ error: "too many requests" }, { status: 429, headers: { "retry-after": String(rateLimit.retryAfterSeconds) } });
+  }
+
+  const userId = await getActiveUserId(request);
   if (userId === null) return errorResponse("login required", 401);
 
   if (!isDbConfigured()) {

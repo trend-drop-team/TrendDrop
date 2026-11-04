@@ -1,22 +1,33 @@
 import cors from "cors";
+import rateLimit from "express-rate-limit";
 import { randomBytes } from "node:crypto";
 import express, { type NextFunction, type Request, type Response } from "express";
-import { eq } from "drizzle-orm";
 
+import { isAllowedOrigin } from "@/lib/allowed-origins";
+import { MAX_KEYWORD_SLUG_LENGTH } from "@/lib/watchlist-constraints";
 import { getCategories } from "@/server/services/category.service";
 import { getHeatmap } from "@/server/services/heatmap.service";
 import { getKeywordDetail, getKeywordHistory } from "@/server/services/keyword.service";
+import { resolveOAuthUser } from "@/server/services/oauth-account.service";
+import { dbGetUserById } from "@/server/repositories/user.repository";
 import { getTimeline, getTrends } from "@/server/services/trend.service";
 import { addWatchlistItem, getWatchlist, removeWatchlistItem } from "@/server/services/watchlist.service";
 import { NotFoundError } from "@/server/http/not-found";
 import { parseLimit, parsePeriod, parseRunId, parseWindowHours } from "@/server/http/query";
-import { createSession, getUserId, SESSION_MAX_AGE } from "@/server/http/auth";
-import { getDb, isDbConfigured } from "@/db";
-import { users } from "@/db/schema";
+import { getActiveUserId } from "@/server/http/active-user";
+import { createSession, SESSION_MAX_AGE } from "@/server/http/auth";
+import { isDbConfigured } from "@/db";
 
 const app = express();
 // Render and other PaaS providers inject PORT; BACKEND_PORT is kept for local development.
 const port = Number(process.env.PORT ?? process.env.BACKEND_PORT ?? 4000);
+
+/**
+ * Render은 TLS를 자신이 종단하고 우리 프로세스에는 평문 HTTP로 넘긴다(단일 홉 리버스 프록시).
+ * 이게 없으면 `request.protocol`이 항상 "http"로 보여 OAuth redirect_uri가 실제 등록된
+ * https 주소와 어긋나고, express-rate-limit의 IP 추출도 프록시 IP 하나로 뭉뚱그려진다(#94).
+ */
+app.set("trust proxy", 1);
 
 /**
  * CORS 허용 출처.
@@ -69,6 +80,47 @@ const oauthProviders = {
   },
 } as const;
 
+const oauthCallbackLimiter = rateLimit({
+  windowMs: 60_000,
+  limit: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "too many requests" },
+});
+
+const watchlistWriteLimiter = rateLimit({
+  windowMs: 60_000,
+  limit: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "too many requests" },
+});
+
+/** 상태변경 라우트의 CSRF 방어(#94). td-session을 cross-site(SameSite=None)로 내려야 하는
+ * 배포 구성에서는 SameSite만으로 CSRF를 막지 못한다 — Origin 헤더는 브라우저가 스푸핑할
+ * 수 없으므로 이걸로 대신 막는다. */
+function requireAllowedOrigin(request: Request, response: Response): boolean {
+  if (!isAllowedOrigin(request.headers.origin ?? null)) {
+    response.status(403).json({ error: "forbidden origin" });
+    return false;
+  }
+  return true;
+}
+
+/** cross-site 배포(프론트 Vercel ↔ 백엔드 Render)에서는 SameSite=Lax인 세션 쿠키가
+ * fetch 요청에 실리지 않는다(#94) — 로컬 개발(같은 site인 localhost:3000/4000)은 Lax로 충분하고
+ * secure 쿠키가 http에서 거부될 수 있어 그대로 둔다. */
+function sessionCookieOptions(maxAge: number) {
+  const isProd = process.env.NODE_ENV === "production";
+  return {
+    httpOnly: true as const,
+    sameSite: (isProd ? "none" : "lax") as "none" | "lax",
+    secure: isProd,
+    maxAge,
+    path: "/",
+  };
+}
+
 function frontendRedirect(value: unknown) {
   const fallback = frontendOrigin?.[0] ?? DEV_ORIGIN;
   if (typeof value !== "string") return `${fallback}/login`;
@@ -81,9 +133,9 @@ function frontendRedirect(value: unknown) {
 
 app.get("/api/auth/me", async (request, response, next) => {
   try {
-    const userId = getUserId(request);
+    const userId = await getActiveUserId(request);
     if (userId === null) { response.status(401).json({ error: "not authenticated" }); return; }
-    const user = (await getDb().select({ id: users.id, email: users.email, name: users.name }).from(users).where(eq(users.id, userId)).limit(1))[0];
+    const user = await dbGetUserById(userId);
     if (!user) { response.status(401).json({ error: "not authenticated" }); return; }
     response.json({ data: user });
   } catch (error) { next(error); }
@@ -108,7 +160,7 @@ app.get("/api/auth/:provider", async (request, response, next) => {
   } catch (error) { next(error); }
 });
 
-app.get("/api/auth/:provider/callback", async (request, response, next) => {
+app.get("/api/auth/:provider/callback", oauthCallbackLimiter, async (request, response, next) => {
   try {
     const providerName = request.params.provider as keyof typeof oauthProviders;
     const provider = oauthProviders[providerName];
@@ -131,35 +183,40 @@ app.get("/api/auth/:provider/callback", async (request, response, next) => {
     const profileResponse = await fetch(provider.profile, { headers: { authorization: `Bearer ${token.access_token}` } });
     if (!profileResponse.ok) throw new Error(`OAuth profile request failed (${profileResponse.status})`);
     const profile = await profileResponse.json() as {
-      id?: number;
+      id?: number; // 카카오 고유 사용자 ID
+      sub?: string; // 구글 고유 사용자 ID(OpenID sub)
       email?: string;
+      email_verified?: boolean; // 구글: 이메일 소유가 실제로 확인됐는지
       name?: string;
       properties?: { nickname?: string };
-      kakao_account?: { email?: string; name?: string; profile?: { nickname?: string } };
+      kakao_account?: { email?: string; is_email_verified?: boolean; name?: string; profile?: { nickname?: string } };
     };
-    // 이메일 동의항목이 선택 동의이거나 계정에 이메일이 없을 수 있다.
-    // users.email은 현재 NOT NULL/UNIQUE이므로 카카오 고유 ID를 내부 fallback으로 사용한다.
-    const email = profile.email ?? profile.kakao_account?.email ?? (profile.id ? `kakao-${profile.id}@users.trenddrop.local` : null);
+    const providerId = providerName === "google" ? profile.sub : (profile.id != null ? String(profile.id) : null);
+    if (!providerId) throw new Error("OAuth provider did not return a stable user id");
+    const rawEmail = profile.email ?? profile.kakao_account?.email ?? null;
+    // provider가 이메일 소유를 보증했을 때만 검증된 것으로 본다(#83) — 카카오는 이메일 동의
+    // 자체가 선택이라 kakao_account가 없거나 is_email_verified가 없을 수 있는데, 그런 경우를
+    // "검증됨"으로 잘못 보면 미검증 이메일로 기존 계정을 가로챌 수 있다.
+    const emailVerified = providerName === "google"
+      ? profile.email_verified === true
+      : profile.kakao_account?.is_email_verified === true;
     const name = profile.name
       ?? profile.kakao_account?.name
       ?? profile.kakao_account?.profile?.nickname
       ?? profile.properties?.nickname
       ?? null;
-    if (!email) throw new Error("OAuth provider did not return an email or user id");
-    const db = getDb();
-    const existing = await db.select({ id: users.id, name: users.name }).from(users).where(eq(users.email, email)).limit(1);
-    const user = existing[0] ?? (await db.insert(users).values({ email, name }).returning({ id: users.id, name: users.name }))[0];
-    if (!user) throw new Error("Unable to create user");
-    if (existing[0] && name && name !== existing[0].name) {
-      await db.update(users).set({ name, updatedAt: new Date() }).where(eq(users.id, user.id));
-    }
+    const user = await resolveOAuthUser({ provider: providerName, providerId, email: rawEmail, emailVerified, name });
     response.clearCookie("td-oauth-state");
-    response.cookie("td-session", createSession(user.id), { httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", maxAge: SESSION_MAX_AGE * 1000, path: "/" });
+    response.cookie("td-session", createSession(user.id), sessionCookieOptions(SESSION_MAX_AGE * 1000));
     response.redirect(`${redirectTarget}?success=1`);
   } catch (error) { next(error); }
 });
 
-app.post("/api/auth/logout", (_request, response) => { response.clearCookie("td-session"); response.status(204).end(); });
+app.post("/api/auth/logout", (request, response) => {
+  if (!requireAllowedOrigin(request, response)) return;
+  response.clearCookie("td-session");
+  response.status(204).end();
+});
 
 app.get("/health", (_request, response) => response.json({ ok: true }));
 
@@ -208,8 +265,8 @@ app.get("/api/keywords/:slug/history", async (request, response, next) => {
 });
 
 /** 로그인 여부를 확인하고, 아니면 401을 바로 써서 보낸다. 통과 시 userId를 돌려준다. */
-function requireUserId(request: Request, response: Response): number | null {
-  const userId = getUserId(request);
+async function requireUserId(request: Request, response: Response): Promise<number | null> {
+  const userId = await getActiveUserId(request);
   if (userId === null) response.status(401).json({ error: "login required" });
   return userId;
 }
@@ -224,21 +281,22 @@ function requireDbConfigured(response: Response): boolean {
 /** 3.6 GET /api/watchlist — 저장한 키워드 목록. */
 app.get("/api/watchlist", async (request, response, next) => {
   try {
-    const userId = requireUserId(request, response);
+    const userId = await requireUserId(request, response);
     if (userId === null) return;
     response.json(await getWatchlist(userId));
   } catch (error) { next(error); }
 });
 
 /** 3.6 POST /api/watchlist { keywordSlug } — 추가(중복은 기존 항목을 그대로 돌려준다). */
-app.post("/api/watchlist", async (request, response, next) => {
+app.post("/api/watchlist", watchlistWriteLimiter, async (request, response, next) => {
   try {
-    const userId = requireUserId(request, response);
+    if (!requireAllowedOrigin(request, response)) return;
+    const userId = await requireUserId(request, response);
     if (userId === null) return;
     if (!requireDbConfigured(response)) return;
 
     const { keywordSlug } = request.body as { keywordSlug?: unknown };
-    if (typeof keywordSlug !== "string" || keywordSlug.trim() === "") {
+    if (typeof keywordSlug !== "string" || keywordSlug.trim() === "" || keywordSlug.length > MAX_KEYWORD_SLUG_LENGTH) {
       response.status(400).json({ error: "keywordSlug is required" });
       return;
     }
@@ -250,13 +308,14 @@ app.post("/api/watchlist", async (request, response, next) => {
 });
 
 /** 3.6 DELETE /api/watchlist/:id — 삭제. 남의 항목이면 404(존재 여부를 흘리지 않는다). */
-app.delete("/api/watchlist/:id", async (request, response, next) => {
+app.delete("/api/watchlist/:id", watchlistWriteLimiter, async (request, response, next) => {
   try {
-    const userId = requireUserId(request, response);
+    if (!requireAllowedOrigin(request, response)) return;
+    const userId = await requireUserId(request, response);
     if (userId === null) return;
     if (!requireDbConfigured(response)) return;
 
-    const itemId = Number.parseInt(request.params.id, 10);
+    const itemId = Number.parseInt(String(request.params.id), 10);
     if (!Number.isFinite(itemId) || itemId <= 0) {
       response.status(400).json({ error: "invalid watchlist id" });
       return;

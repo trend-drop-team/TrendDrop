@@ -36,6 +36,13 @@
       "when": 1792505268442,
       "tag": "0004_add_user_role",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1793200282476,
+      "tag": "0005_add_oauth_identity_and_session_revocation",
+      "breakpoints": true
     }
   ]
 }
