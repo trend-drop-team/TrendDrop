@@ -65,8 +65,14 @@ const before = new Map(aliases);
 const { ranked, meta, review } = await rankIssues(rows, extractions, aliases, { topN, windowHours, useReview, profile });
 const errors = [ext.error, review.error].filter(Boolean);
 if (save && profile === "discovery" && (!useReview || review.error || ext.error || ext.skipped)) {
+  const reasons = [
+    ...errors,
+    ...(!useReview ? ["최종 검수가 비활성화돼 있습니다."] : []),
+    ...(ext.skipped ? [`추출하지 못한 원문 ${ext.skipped}개`] : []),
+  ];
+  console.error(`::error::발견 랭킹 저장 중단 — ${reasons.join(" / ")}`);
   await closeDb();
-  throw new Error("발견 랭킹은 최종 검수가 성공한 경우에만 저장할 수 있습니다.");
+  throw new Error(`발견 랭킹 저장 중단: ${reasons.join(" / ")}`);
 }
 
 const short = (s, n = 44) => (s.length > n ? s.slice(0, n) + "…" : s);
