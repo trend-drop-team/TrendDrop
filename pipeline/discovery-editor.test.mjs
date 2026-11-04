@@ -38,6 +38,16 @@ test("첫 편집 모델이 성공하면 다른 모델을 호출하지 않는다"
   assert.equal(result.model, "first");
 });
 
+test("모든 편집 모델이 실패하면 마지막 Lite 오류도 운영 진단에 남는다", async () => {
+  const rows = ["one", "two"].map((textHash) => ({ site: "dcbest", kind: "title", text: "돌케이크", textHash, bucketAt: "2026-11-04T12:00:00Z" }));
+  const cache = new Map(rows.map((row) => [row.textHash, { timeliness: "buzz", keywords: [{ name: "돌케이크", category: "기업·주식" }] }]));
+  const result = await rankIssues(rows, cache, new Map(), { profile: "discovery", editorial: { generate: async (model) => {
+    throw Object.assign(new Error(`${model} 일시적 사용 불가`), { status: 503 });
+  } } });
+  assert.equal(result.ranked.length, 0);
+  assert.match(result.review.error, /gemini-3.5-flash-lite/);
+});
+
 test("의미 불명과 관측 부재를 구분하고 실제 제외 근거는 유지한다", () => {
   const observed = { id: 1, term: "낯선표현", signals: { discovery: { trendBuckets: 4 } }, evidence: [{ id: "trend", site: "xtrends", trendRank: 13, text: "낯선표현" }] };
   const unknown = { ...keep, action: "drop", kind: "unknown", displayName: "", parentEntity: "", phenomenon: "", evidenceIds: [], exclusionReason: "meaning_unknown" };

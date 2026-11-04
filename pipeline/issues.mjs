@@ -454,7 +454,7 @@ export async function rankIssues(rows, extractions, aliases, { topN = 10, window
       info = describe(rows, extractions, rankingAliases);
     } catch (err) {
       if ([400, 401, 403].includes(err.status)) throw err;
-      reviewResult.error = `검수 실패: ${String(err.message).slice(0, 160)}`;
+      reviewResult.error = `검수 실패: ${String(err.message)}`;
       if (profile === "discovery") return { ranked: [], meta, review: reviewResult };
     }
   }
