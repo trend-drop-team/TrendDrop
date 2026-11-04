@@ -1,0 +1,214 @@
+# master에 머지될 때마다 돌면서, 마이그레이션이 껴 있으면 사람 승인(클릭) 후에만
+# 적용하고, 없으면 바로 Render 배포를 시작시킨다. (#109)
+#
+# ★ 전체 흐름 (잡 3개로 나뉜다 — changes가 갈림길, migrate/deploy는 둘 중 하나만 돈다).
+#
+#   changes: 이번 push가 drizzle/** 를 건드렸는지 확인한다 (항상 돈다)
+#     ├─ 건드렸으면 → migrate 잡
+#     │    → environment: production 필수 리뷰어 승인 대기로 멈춘다
+#     │      (Actions 탭에 "Review pending deployments" 배너, 리뷰어에게 알림 감)
+#     │    → 리뷰어가 Approve를 누르면 DATABASE_URL 시크릿에 접근 가능해지고
+#     │      마이그레이션이 실제로 돈다
+#     │    → 성공하면 마지막 스텝이 Render Deploy Hook을 호출해 배포를 시작시킨다
+#     └─ 안 건드렸으면 → deploy 잡
+#          → 승인 없이 바로 Render Deploy Hook을 호출한다 (Render의 기존
+#            Auto-Deploy가 하던 일을 그대로 대신한다)
+#
+#   ★★ changes를 잡 트리거의 paths 필터(on.push.paths)가 아니라 잡 안의 git diff로
+#      판단하는 이유 — 처음엔 `on.push.paths: [drizzle/**]`로 워크플로 자체를
+#      걸렀는데, 그러면 drizzle/를 안 건드린 "보통의" 머지에는 이 워크플로가
+#      아예 시작을 안 한다. Render Auto-Deploy를 꺼둔 상태에서 이 워크플로의
+#      Deploy Hook 호출이 사실상 유일한 배포 수단이 되므로, 그 경우 **코드가 영원히
+#      배포되지 않는다.** 그래서 트리거는 모든 master push에 걸어두고, "마이그레이션이
+#      있었나"는 changes 잡 안에서 판단해 migrate/deploy 둘 중 하나로만 갈라지게 했다.
+#
+#   Render의 "Auto-Deploy"는 꺼져 있어야 한다(레포 설정이 아니라 Render 대시보드
+#   설정이라 여기서 강제할 수 없다 — 꺼두지 않으면 master에 push되는 순간 Render가
+#   이 워크플로와 무관하게 즉시 배포를 시작해서, 마이그레이션 승인 대기 중에 새
+#   코드가 먼저 떠버리는 경쟁 상태가 그대로 재현된다. 이게 애초에 이 체이닝을
+#   만든 이유다).
+#
+# ★ 왜 자동 배포(Render buildCommand/preDeployCommand)에 바로 끼워 넣지 않았나.
+#   이 레포의 마이그레이션엔 ADD COLUMN만 있던 게 아니라 DROP도 있었다
+#   (drizzle/0003_drop_keyword_verdicts.sql). "머지하면 조건 없이 자동 적용"은
+#   되돌리기 어려운 변경이 그대로 반영된다는 뜻이라, 최소한 "사람이 한 번 보고
+#   눌러야 한다"는 지점을 남겨뒀다 — environment 필수 리뷰어가 그 지점이다.
+#   마이그레이션이 없는 보통의 배포까지 승인을 요구하진 않는다(그러면 모든 배포가
+#   느려진다) — 딱 위험한 경우에만 게이트를 건다.
+#
+# ★ workflow_dispatch도 같이 남겨둔 이유.
+#   자동 실행이 실패했거나(예: 승인자가 알림을 놓침) 같은 마이그레이션을 수동으로
+#   다시 돌려야 할 때의 보조 수단. 수동 트리거는 항상 migrate 경로로 간다(파일이
+#   실제로 바뀌었는지 다시 확인하지 않음 — 수동으로 누른다는 것 자체가 "지금
+#   마이그레이션을 돌리고 싶다"는 의사표시다). 이 경로는 "Run workflow" 화면에서
+#   아무 브랜치나 고를 수 있어서(자동 push 트리거와 달리), confirm 문자열 입력 +
+#   master 강제 체크를 그대로 둔다.
+#
+# ★ DATABASE_URL / RENDER_DEPLOY_HOOK_URL을 `secrets.*`로 그대로 참조하는 이유.
+#   둘 다 레포 시크릿으로 등록한다(environment 시크릿이 아니라). DATABASE_URL은
+#   collect.yml·rank.yml이 이미 같은 이름으로 쓰고 있어 그대로 재사용한다.
+#   RENDER_DEPLOY_HOOK_URL은 deploy 잡(environment 바인딩 없음)과 migrate 잡
+#   (environment: production) 양쪽에서 다 접근해야 하므로 레포 시크릿으로 둬야
+#   한다 — environment 시크릿으로 등록하면 environment가 없는 deploy 잡은 못 읽는다.
+#
+# 문서: issue #109
+
+name: db migrate
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: '정말 프로덕션 DB에 마이그레이션을 적용하려면 정확히 "migrate-production"을 입력'
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  # 이번 push가 drizzle/** 를 건드렸는지 판단해 migrate/deploy 중 어느 쪽으로
+  # 보낼지 정한다. 수동 트리거(workflow_dispatch)는 항상 migrate로 보낸다.
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      migration: ${{ steps.filter.outputs.migration }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # github.event.before(머지 전 master 커밋)까지 git diff로 봐야 하는데,
+          # 얕은 클론이면 그 커밋이 안 받아져서 diff가 실패할 수 있다.
+          fetch-depth: 0
+
+      - id: filter
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BEFORE_SHA: ${{ github.event.before }}
+          HEAD_SHA: ${{ github.sha }}
+        # git diff 실패(존재하지 않는 커밋, 네트워크 오류 등)를 "drizzle 변경 없음"으로
+        # 착각하면 안 된다 — grep -q만 보면 git diff가 아무것도 출력 못 하고 에러로
+        # 끝나도 grep은 그냥 "못 찾음"(exit 1)으로 보여서 migration=false로 조용히
+        # 빠진다. diff 자체의 성공 여부를 따로 확인하고, before가 all-zero(새 브랜치의
+        # 첫 push일 때 GitHub이 주는 값)이거나 diff가 실패하면 모호하므로 migration=true로
+        # 접어 안전한 쪽(승인 게이트를 탄다)으로 넘어가게 한다.
+        run: |
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            echo "migration=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [ -z "$BEFORE_SHA" ] || [ "$BEFORE_SHA" = "0000000000000000000000000000000000000000" ]; then
+            echo "::warning::비교할 이전 커밋이 없다(새 브랜치 첫 push 등) — 안전하게 migration=true로 처리"
+            echo "migration=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if ! changed=$(git diff --name-only "$BEFORE_SHA" "$HEAD_SHA"); then
+            echo "::error::git diff 실패(before=$BEFORE_SHA head=$HEAD_SHA) — 안전하게 migration=true로 처리"
+            echo "migration=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if echo "$changed" | grep -q '^drizzle/'; then
+            echo "migration=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "migration=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  migrate:
+    needs: changes
+    if: needs.changes.outputs.migration == 'true'
+    runs-on: ubuntu-latest
+    environment: production
+    # drizzle-kit이 내부적으로 트랜잭션을 안 쓰는 마이그레이션(DROP 등)에서 타임아웃에
+    # 걸려 중간에 끊기면, 스키마는 바뀌었는데 __drizzle_migrations엔 기록이 안 남는
+    # 반쪽 상태가 될 수 있다 — 그 복구는 수동이다(__drizzle_migrations 테이블과 실제
+    # 스키마를 직접 대조). collect.yml·rank.yml과 같은 20분으로 맞춰 여유를 둔다.
+    timeout-minutes: 20
+    # deploy 잡과 **같은** concurrency 그룹을 쓴다 — 이름만 보면 마이그레이션끼리만
+    # 겹치지 않게 막는 걸로 보이지만, 그걸로는 부족하다: 머지 A가 drizzle/를 건드려
+    # migrate로 가서 승인 대기 중인데, 그 뒤에 머지된 B(drizzle/ 무관)가 deploy로
+    # 가서 승인 없이 먼저 배포돼버리면, A의 마이그레이션이 적용되기도 전에 A를 포함한
+    # 코드가(B에 A가 얹혀 있으므로) 그대로 떠버린다. 같은 그룹으로 묶어서 "먼저 들어온
+    # push 하나가 끝날 때까지 다음 push는(그게 migrate든 deploy든) 기다린다"로 만든다.
+    # 승인 대기 상태도 "진행 중"으로 쳐서 그룹을 점유한다.
+    concurrency:
+      group: master-release-pipeline
+      cancel-in-progress: false
+
+    steps:
+      # push 트리거는 branches: [master] 필터가 있어 이 체크가 사실상 항상 통과한다.
+      # workflow_dispatch는 "Run workflow" 화면에서 아무 브랜치나 고를 수 있고,
+      # environment 승인 화면은 "누가 승인했는지"는 보여줘도 "어떤 코드가 승인됐는지"는
+      # 뚜렷이 안 드러나므로, 그 경로에 대한 방어로 그대로 둔다.
+      - name: master에서 실행됐는지 확인
+        env:
+          RUN_REF: ${{ github.ref }}
+        run: |
+          if [ "$RUN_REF" != "refs/heads/master" ]; then
+            echo "::error::이 워크플로는 master에서만 실행할 수 있다. 선택된 ref: $RUN_REF"
+            exit 1
+          fi
+
+      - name: confirm 입력값 확인 (수동 실행일 때만)
+        # push 트리거는 환경 승인 클릭 자체가 확인 역할을 하므로 이 입력이 없다.
+        # workflow_dispatch로 수동 재실행할 때만 추가로 타이핑을 요구한다.
+        # (inputs.confirm은 push 이벤트엔 정의 안 되지만, GitHub Actions는 존재하지
+        # 않는 컨텍스트 값을 빈 문자열로 평가할 뿐 에러를 내지 않는다 — 이 스텝 자체가
+        # if 조건으로 push에서는 실행되지 않으니 어차피 안 쓰인다.)
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          CONFIRM_INPUT: ${{ inputs.confirm }}
+        run: |
+          if [ "$CONFIRM_INPUT" != "migrate-production" ]; then
+            echo "::error::confirm 입력이 'migrate-production'과 일치하지 않는다."
+            exit 1
+          fi
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      # drizzle-kit은 devDependencies라 --omit=dev를 쓰는 collect.yml·rank.yml과 달리
+      # 전체 설치가 필요하다.
+      - run: npm ci
+
+      # 실제 DB에 손대기 전에 파일 정합성부터 확인한다(과거 사고: 0001 마이그레이션이
+      # journal에 등록 안 돼서 db:migrate가 영원히 건너뛴 적이 있다 — scripts/verify-migrations.mjs 참고).
+      - run: npm run verify:migrations
+
+      # npm run db:migrate가 아니라 drizzle-kit을 직접 부른다 — 그 npm 스크립트는
+      # `--env-file=.env.local`이 붙어 있는데 .env.local은 gitignore라 러너에 없다.
+      # (collect.yml의 같은 이유와 동일)
+      - run: node node_modules/drizzle-kit/bin.cjs migrate --config=drizzle.config.mjs
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+
+      # 마이그레이션이 성공했을 때만(이 스텝 앞에서 하나라도 실패하면 여기 오지 않는다)
+      # Render 배포를 시작시킨다.
+      - name: Render 배포 트리거
+        run: curl --fail --silent --show-error -X POST "$RENDER_DEPLOY_HOOK_URL"
+        env:
+          RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+
+  # drizzle/**를 안 건드린 보통의 머지 — 승인 없이 바로 배포한다. Render의 기존
+  # Auto-Deploy를 대신하는 자리라 여기엔 environment를 안 건다(모든 배포에 승인을
+  # 요구하면 평소 작업 속도가 떨어진다 — 위험한 경우에만 migrate 잡에서 막는다).
+  deploy:
+    needs: changes
+    if: needs.changes.outputs.migration == 'false'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # migrate 잡과 같은 그룹 — 이유는 migrate 잡 쪽 주석 참고.
+    concurrency:
+      group: master-release-pipeline
+      cancel-in-progress: false
+    steps:
+      - name: Render 배포 트리거
+        run: curl --fail --silent --show-error -X POST "$RENDER_DEPLOY_HOOK_URL"
+        env:
+          RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
