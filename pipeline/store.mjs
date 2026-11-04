@@ -314,7 +314,7 @@ export async function upsertKeyword(term, { sourceId, categoryId } = {}) {
  * summary는 채우지 않는다 — 이 서비스는 키워드만 모은다(2026-10-14 yang 결정).
  * 이슈 추출의 issue는 검수 판단 근거로만 쓰고 저장하지 않는다.
  */
-export async function saveTrendSnapshots(runId, bucketAt, ranked) {
+export async function saveTrendSnapshots(runId, bucketAt, ranked, { rankingProfile = "general" } = {}) {
   const s = await sql();
   await assertSchema();
   const bySite = await sourceIdMap();
@@ -340,6 +340,7 @@ export async function saveTrendSnapshots(runId, bucketAt, ranked) {
   // keyword_id별 score. LLM 없이 순수 비교로 낸다.
   const [prevRun] = await s`SELECT id FROM collection_runs
     WHERE pipeline = 'popular' AND id < ${runId}
+      AND COALESCE(api_call_log->>'rankingProfile', 'general') = ${rankingProfile}
     ORDER BY id DESC LIMIT 1`;
   const prevScores = prevRun
     ? new Map(
@@ -360,6 +361,8 @@ export async function saveTrendSnapshots(runId, bucketAt, ranked) {
         source: src.source,
         weight: src.weightSum,
         ...(idx === 0 && k.sample ? { text: k.sample, sample: k.sample } : {}),
+        ...(idx === 0 && k.evidence ? { editorial: { parentEntity: k.parentEntity, phenomenon: k.phenomenon, kind: k.kind,
+          domain: k.domain, meaningUnresolved: k.meaningUnresolved ?? false, evidence: k.evidence, discovery: k.discovery } } : {}),
       }));
       const sourceLabel = k.sources?.map((src) => src.source).join(", ") || null;
       const growthRate = formatGrowthRate(k.score, k.mentions, prevScores.get(keywordIds[i]));
