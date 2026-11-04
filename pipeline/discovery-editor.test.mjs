@@ -87,6 +87,19 @@ test("추출 모델이 원문을 누락하면 성공으로 보고하지 않는�
   assert.match(stats.error, /누락/);
 });
 
+test("의미 미확인 해시태그의 허용된 띄어쓰기 표기를 보존한다", async () => {
+  const rows = ["09", "10", "11", "12"].map((hour) => ({
+    site: "xtrends", kind: "title", text: "#HAPPY_K_DAY", textHash: "hashtag", meta: { rank: 13 }, bucketAt: `2026-11-04T${hour}:00:00Z`,
+  }));
+  const cache = new Map([["hashtag", { timeliness: "buzz", keywords: [{ name: "HAPPY K DAY", category: "유행어·밈" }] }]]);
+  const result = await rankIssues(rows, cache, new Map(), { profile: "discovery", editorial: { models: ["offline"], generate: async (model, system, user) => ({
+    decisions: JSON.parse(user).candidates.map((candidate) => ({ ...keep, id: candidate.id, action: "drop", kind: "unknown", domain: "other", displayName: "", parentEntity: "", phenomenon: "", evidenceIds: [], exclusionReason: "meaning_unknown", reason: "의미 미확인" })),
+  }) } });
+  assert.equal(result.review.error, null);
+  assert.equal(result.ranked[0].term, "HAPPY K DAY");
+  assert.equal(result.ranked[0].meaningUnresolved, true);
+});
+
 test("불완전한 편집 응답이면 미검수 순위를 대신 반환하지 않는다", async () => {
   const rows = ["one", "two"].map((textHash) => ({ site: "dcbest", kind: "title", text: "새 표현", textHash, bucketAt: "2026-11-04T12:00:00Z" }));
   const cache = new Map(rows.map((row) => [row.textHash, { timeliness: "buzz", keywords: [{ name: "새 표현", category: "유행어·밈" }] }]));

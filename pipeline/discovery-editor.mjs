@@ -41,7 +41,9 @@ export const EDITOR_SCHEMA = {
   } } }, required: ["decisions"],
 };
 
-const normalized = (text) => text.normalize("NFKC").toLowerCase().replace(/\s+/g, " ").trim();
+const normalized = (text) => text.normalize("NFKC").toLowerCase()
+  .replace(/#[\p{L}\p{N}_]+/gu, (hashtag) => hashtag.slice(1).replace(/_/g, " "))
+  .replace(/\s+/g, " ").trim();
 
 export function validateEditorial(result, packets) {
   if (!Array.isArray(result?.decisions)) throw new Error("편집 응답에 decisions가 없습니다.");
