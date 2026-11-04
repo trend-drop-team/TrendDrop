@@ -1,7 +1,25 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { CATEGORY_MULT, termMultiplierFor, cleanItem } from "./issues.mjs";
+import { CATEGORY_MULT, termMultiplierFor, cleanItem, rankIssues } from "./issues.mjs";
 import { ISSUE_CATEGORIES } from "./issue-prompt.mjs";
+
+test("문화 실험은 인물보다 밈·작품 후보를 보존하며 원본 캐시를 바꾸지 않는다", async () => {
+  const rows = [];
+  const cache = new Map();
+  for (const [name, category] of [["새로운 표현", "유행어·밈"], ["새로운 작품", "작품·콘텐츠"], ["어떤 인물", "인물"]]) {
+    for (const index of [1, 2]) {
+      const textHash = `${name}-${index}`;
+      rows.push({ site: "dcbest", kind: "title", text: textHash, textHash, bucketAt: "2026-11-04T12:00:00Z" });
+      cache.set(textHash, { timeliness: "buzz", keywords: [{ name, category, issue: null }] });
+    }
+  }
+  const general = await rankIssues(rows, cache, new Map(), { useReview: false });
+  const culture = await rankIssues(rows, cache, new Map(), { useReview: false, profile: "culture" });
+  assert.equal(general.ranked.length, 3);
+  assert.deepEqual(new Set(culture.ranked.map((item) => item.term)), new Set(["새로운 표현", "새로운 작품"]));
+  assert.equal(cache.get("어떤 인물-1").keywords.length, 1);
+  await assert.rejects(rankIssues(rows, cache, new Map(), { profile: "unknown" }), /Unknown ranking profile/);
+});
 
 const extractions = new Map([
   ["h1", { timeliness: "now", keywords: [

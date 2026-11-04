@@ -1,5 +1,5 @@
 /**
- * 수집 오케스트레이션 — 6소스를 병렬 스크래핑해 1시간 버킷으로 raw_signals에 축적.
+ * 수집 오케스트레이션 — 6소스 중 제외 목록(sources/excluded-sources.mjs)을 뺀 나머지를 병렬 스크래핑해 1시간 버킷으로 raw_signals에 축적.
  * trend-collector src/jobs/collect-sources.ts 에서 이전(SQLite→Postgres).
  *
  * 실행:  node pipeline/collect.mjs
@@ -14,8 +14,11 @@ import { collect as instiz } from "./sources/instiz.mjs";
 import { collect as youtube } from "./sources/youtube.mjs";
 import { collect as gtrends } from "./sources/gtrends.mjs";
 import { collect as xtrends } from "./sources/xtrends.mjs";
+import { activeAdapters } from "./adapters.mjs";
+import { EXCLUDED_SOURCES } from "./sources/excluded-sources.mjs";
 import { insertRawItems, startRun, finishRun, closeDb } from "./store.mjs";
 
+// 더쿠·인스티즈는 2026-10-21부터 EXCLUDED_SOURCES로 실행에서 뺀다(목록·import는 되돌리기 쉽게 남김).
 // 네이트판은 2026-08-03에 제외했다 — 사연·신변잡기 위주라 트렌드 키워드가 거의 안 나왔다.
 const ADAPTERS = [
   ["dcbest", dcbest],
@@ -49,9 +52,11 @@ async function main() {
   const collectedAt = now.toISOString();
   const kst = now.toLocaleString("ko-KR", { timeZone: "Asia/Seoul" });
 
-  console.log(`\n🗂  ${ADAPTERS.length}소스 수집 — 버킷 ${bucket} (${kst} KST)\n`);
+  const active = activeAdapters(ADAPTERS, EXCLUDED_SOURCES);
 
-  const results = await Promise.all(ADAPTERS.map(runAdapter));
+  console.log(`\n🗂  ${active.length}소스 수집 — 버킷 ${bucket} (${kst} KST)\n`);
+
+  const results = await Promise.all(active.map(runAdapter));
 
   // raw_signals 형식으로 평탄화 (dedup 키: source_site, text_hash, bucket_at)
   const rows = [];
