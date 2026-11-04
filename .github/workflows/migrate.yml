@@ -49,9 +49,26 @@ jobs:
   migrate:
     runs-on: ubuntu-latest
     environment: production
-    timeout-minutes: 10
+    # drizzle-kit이 내부적으로 트랜잭션을 안 쓰는 마이그레이션(DROP 등)에서 타임아웃에
+    # 걸려 중간에 끊기면, 스키마는 바뀌었는데 __drizzle_migrations엔 기록이 안 남는
+    # 반쪽 상태가 될 수 있다 — 그 복구는 수동이다(__drizzle_migrations 테이블과 실제
+    # 스키마를 직접 대조). collect.yml·rank.yml과 같은 20분으로 맞춰 여유를 둔다.
+    timeout-minutes: 20
 
     steps:
+      # workflow_dispatch는 기본적으로 "Run workflow" 화면에서 아무 브랜치나 골라 실행할
+      # 수 있다 — environment의 필수 리뷰어 승인은 "누군가 승인했다"만 보장하지 "어떤
+      # 코드가 승인됐는지"는 승인 화면에 뚜렷이 안 드러난다. master가 아닌 브랜치(아직
+      # 리뷰 안 된 마이그레이션이 섞여 있을 수 있는)에서 실행되는 걸 막는다.
+      - name: master에서 실행됐는지 확인
+        env:
+          RUN_REF: ${{ github.ref }}
+        run: |
+          if [ "$RUN_REF" != "refs/heads/master" ]; then
+            echo "::error::이 워크플로는 master에서만 실행할 수 있다. 선택된 ref: $RUN_REF"
+            exit 1
+          fi
+
       - name: confirm 입력값 확인
         # inputs.confirm을 run: 스크립트에 직접 문자열 치환하지 않는다 — 사람이 직접
         # 타이핑하는 값이라 공격 시나리오는 낮지만, "", $(), 백틱 같은 쉘 특수문자가
