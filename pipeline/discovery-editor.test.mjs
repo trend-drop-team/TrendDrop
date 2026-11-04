@@ -15,6 +15,39 @@ test("추출 모델 비교에서 다른 모델의 캐시를 재사용하지 않�
 const packet = { id: 1, term: "하겐다즈", evidence: [{ id: "cake", text: "하겐다즈 돌케이크 자르기" }] };
 const keep = { id: 1, action: "keep", displayName: "돌케이크", parentEntity: "하겐다즈", phenomenon: "돌케이크 자르기", kind: "product", domain: "food", evidenceIds: ["cake"], reason: "원문에 있는 구체적인 상품", exclusionReason: "none" };
 
+test("제외 유형을 유지하라는 모델 응답은 해당 후보만 제외한다", () => {
+  for (const kind of ["person", "organization", "team", "generic"]) {
+    const decisions = validateEditorial({ decisions: [keep, { ...keep, id: 2, kind }] }, [packet, { ...packet, id: 2 }]);
+    assert.equal(decisions[0].action, "keep");
+    assert.equal(decisions[1].action, "drop");
+    assert.deepEqual(decisions[1].evidenceIds, []);
+    assert.equal(decisions[1].exclusionReason, kind === "generic" ? "generic" : "routine_entity");
+  }
+});
+
+test("응답 검증 실패도 다음 모델로 넘어가며 미검증 응답을 반환하지 않는다", async () => {
+  const calls = [];
+  const result = await editDiscovery([packet], { models: ["invalid", "valid"], generate: async (model) => {
+    calls.push(model);
+    return { decisions: model === "invalid" ? [] : [keep] };
+  } });
+  assert.deepEqual(calls, ["invalid", "valid"]);
+  assert.equal(result.model, "valid");
+  assert.match(result.fallbackReason, /누락/);
+  assert.equal(result.decisions[0].displayName, "돌케이크");
+  await assert.rejects(editDiscovery([packet], { models: ["invalid"], generate: async () => ({ decisions: [] }) }), /누락/);
+});
+
+test("제외 후보가 섞인 실제 랭킹 경로에서도 정상 후보는 저장 가능한 결과로 남는다", async () => {
+  const rows = ["돌케이크", "유명인"].flatMap((name) => ["one", "two"].map((suffix) => ({ site: "dcbest", kind: "title", text: name, textHash: name + suffix, bucketAt: "2026-11-04T12:00:00Z" })));
+  const cache = new Map(rows.map((row) => [row.textHash, { timeliness: "buzz", keywords: [{ name: row.text, category: "유행어·밈" }] }]));
+  const result = await rankIssues(rows, cache, new Map(), { profile: "discovery", editorial: { models: ["offline"], generate: async (model, system, user) => ({
+    decisions: JSON.parse(user).candidates.map((candidate) => ({ ...keep, id: candidate.id, displayName: candidate.term, parentEntity: "", kind: candidate.term === "유명인" ? "person" : "product", evidenceIds: candidate.evidence.map((item) => item.id) })),
+  }) } });
+  assert.equal(result.review.error, null);
+  assert.deepEqual(result.ranked.map((item) => item.term), ["돌케이크"]);
+});
+
 test("상위 모델의 한도·과부하 실패 시 다음 모델을 거쳐 Lite로 대체한다", async () => {
   assert.deepEqual(EDITOR_MODELS, ["gemini-3.8-flash", "gemini-3.7-flash", "gemini-3.6-flash", "gemini-3.5-flash-lite"]);
   const calls = [];
@@ -77,13 +110,14 @@ test("반복 관측된 낯선 트렌드는 의미를 몰라도 랭킹 경로에�
 
 test("지어낸 이름·다른 후보의 근거·누락·중복은 허용하지 않는다", () => {
   assert.equal(validateEditorial({ decisions: [keep] }, [packet])[0].displayName, "돌케이크");
-  assert.throws(() => validateEditorial({ decisions: [{ ...keep, displayName: "새로 만든 밈" }] }, [packet]), /원문/);
-  assert.throws(() => validateEditorial({ decisions: [{ ...keep, evidenceIds: ["other"] }] }, [packet]), /근거 ID/);
+  assert.equal(validateEditorial({ decisions: [{ ...keep, displayName: "새로 만든 밈" }] }, [packet])[0].action, "drop");
+  assert.equal(validateEditorial({ decisions: [{ ...keep, evidenceIds: ["other"] }] }, [packet])[0].action, "drop");
   assert.throws(() => validateEditorial({ decisions: [] }, [packet]), /누락/);
   assert.throws(() => validateEditorial({ decisions: [keep, keep] }, [packet]), /중복/);
-  assert.throws(() => validateEditorial({ decisions: [{ ...keep, kind: "organization" }] }, [packet]), /인물/);
-  assert.throws(() => validateEditorial({ decisions: [keep, { ...keep, id: 2 }] }, [packet, { ...packet, id: 2 }]), /중복 지정/);
-  assert.throws(() => validateEditorial({ decisions: [{ ...keep, displayName: "늘신", parentEntity: "" }] }, [{ ...packet, evidence: [{ id: "cake", text: "오늘 신상 공개" }] }]), /원문/);
+  assert.equal(validateEditorial({ decisions: [{ ...keep, kind: "organization" }] }, [packet])[0].action, "drop");
+  assert.deepEqual(validateEditorial({ decisions: [keep, { ...keep, id: 2 }] }, [packet, { ...packet, id: 2 }]).map((d) => d.action), ["keep", "drop"]);
+  assert.equal(validateEditorial({ decisions: [{ ...keep, displayName: "늘신", parentEntity: "" }] }, [{ ...packet, evidence: [{ id: "cake", text: "오늘 신상 공개" }] }])[0].action, "drop");
+  assert.equal(validateEditorial({ decisions: [{ ...keep, parentEntity: "없는 이름" }] }, [packet])[0].action, "drop");
 });
 
 test("응답 주입 테스트는 외부 모델을 호출하지 않는다", async () => {

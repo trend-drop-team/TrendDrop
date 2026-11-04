@@ -63,20 +63,24 @@ export function validateEditorial(result, packets) {
     if (["displayName", "parentEntity", "phenomenon", "reason"].some((key) => typeof decision[key] !== "string")) throw new Error("편집 응답의 문자열 필드가 잘못됐습니다.");
     if (!["keep", "drop"].includes(decision.action) || !KINDS.includes(decision.kind) || !DOMAINS.includes(decision.domain)) throw new Error("편집 응답의 action/kind/domain이 잘못됐습니다.");
     if (decision.action === "drop") return { ...decision, evidenceIds: [] };
-    if (decision.exclusionReason !== "none") throw new Error("유지 후보에 제외 사유가 지정됐습니다.");
+    const reject = (reason) => ({ ...decision, action: "drop", evidenceIds: [], exclusionReason: "insufficient_signal", reason });
+    if (["person", "organization", "team", "generic"].includes(decision.kind)) {
+      return { ...decision, action: "drop", evidenceIds: [], exclusionReason: decision.kind === "generic" ? "generic" : "routine_entity", reason: "인물·조직·팀·일반어는 랭킹 대상에서 제외" };
+    }
+    if (decision.exclusionReason !== "none") return { ...decision, action: "drop", evidenceIds: [] };
     if (decision.kind === "unknown") {
-      if (!hasObservationSupport(packet)) throw new Error("의미 불명 후보에 관측 근거가 없습니다.");
+      if (!hasObservationSupport(packet)) return reject("의미 불명 후보에 관측 근거가 없습니다.");
       decision = { ...decision, displayName: packet.term, parentEntity: "", phenomenon: "", domain: "other", meaningUnresolved: true };
     } else if (!allowedKinds.has(decision.kind)) throw new Error("인물·조직·일반어 후보를 유지할 수 없습니다.");
-    if (!Array.isArray(decision.evidenceIds) || !decision.evidenceIds.length) throw new Error("유지 후보에 근거가 없습니다.");
+    if (!Array.isArray(decision.evidenceIds) || !decision.evidenceIds.length) return reject("유지 후보에 근거가 없습니다.");
     const evidence = new Map(packet.evidence.map((item) => [item.id, item]));
-    if (decision.evidenceIds.some((id) => !evidence.has(id))) throw new Error("후보에 속하지 않는 근거 ID입니다.");
+    if (decision.evidenceIds.some((id) => !evidence.has(id))) return reject("후보에 속하지 않는 근거 ID입니다.");
     const name = typeof decision.displayName === "string" ? decision.displayName.trim() : "";
-    if ((name.match(/[\p{L}\p{N}]/gu) ?? []).length < 2 || !decision.evidenceIds.some((id) => normalized(evidence.get(id).text).includes(normalized(name)))) throw new Error("표시 이름이 인용된 원문에 없습니다.");
-    if (seenNames.has(normalized(name))) throw new Error("다른 후보에 같은 표시 이름을 중복 지정했습니다.");
+    if ((name.match(/[\p{L}\p{N}]/gu) ?? []).length < 2 || !decision.evidenceIds.some((id) => normalized(evidence.get(id).text).includes(normalized(name)))) return reject("표시 이름이 인용된 원문에 없습니다.");
+    if (seenNames.has(normalized(name))) return { ...reject("다른 후보에 같은 표시 이름을 중복 지정했습니다."), exclusionReason: "duplicate" };
     seenNames.add(normalized(name));
     const parent = typeof decision.parentEntity === "string" ? decision.parentEntity.trim() : "";
-    if (parent && !decision.evidenceIds.some((id) => normalized(evidence.get(id).text).includes(normalized(parent)))) throw new Error("상위 대상이 인용된 원문에 없습니다.");
+    if (parent && !decision.evidenceIds.some((id) => normalized(evidence.get(id).text).includes(normalized(parent)))) return reject("상위 대상이 인용된 원문에 없습니다.");
     return { ...decision, displayName: name, parentEntity: parent, evidenceIds: [...new Set(decision.evidenceIds)] };
   });
   if (seen.size !== packets.length) throw new Error("편집 응답에 누락된 후보가 있습니다.");
@@ -86,8 +90,11 @@ export function validateEditorial(result, packets) {
 export async function editDiscovery(packets, { generate = generateJson, models = EDITOR_MODELS, response } = {}) {
   if (!packets.length) return { decisions: [], model: null, fallbackReason: null };
   if (response !== undefined) return { decisions: validateEditorial(response, packets), model: "injected-test-response", fallbackReason: null };
-  const { result, model, fallbackReason } = await withModelFallback((candidate) => generate(candidate, EDITOR_SYSTEM, JSON.stringify({ candidates: packets }), EDITOR_SCHEMA), models);
-  return { decisions: validateEditorial(result, packets), model, fallbackReason };
+  const { result, model, fallbackReason } = await withModelFallback(async (candidate) => {
+    const response = await generate(candidate, EDITOR_SYSTEM, JSON.stringify({ candidates: packets }), EDITOR_SCHEMA);
+    return validateEditorial(response, packets);
+  }, models);
+  return { decisions: result, model, fallbackReason };
 }
 
 export function projectEditorial(rows, extractions, aliases, packets, decisions) {
