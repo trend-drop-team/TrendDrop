@@ -76,18 +76,21 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/", label: "랭킹", icon: RankIcon },
   { href: "/explore", label: "탐색", icon: ExploreIcon },
   { href: "/trend", label: "트렌드", icon: TrendIcon },
-  { href: "/docs", label: "문서", icon: DocsIcon },
 ];
+
+/** 문서는 관리자만 본다(#79) — showDocsNav가 false면 탭바에서 아예 뺀다. */
+const DOCS_NAV_ITEM: NavItem = { href: "/docs", label: "문서", icon: DocsIcon };
 
 function isActive(pathname: string, href: string): boolean {
   if (href === "/") return pathname === "/";
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-export default function AppNav() {
+export default function AppNav({ showDocsNav }: { showDocsNav: boolean }) {
   const pathname = usePathname() ?? "/";
   const [user, setUser] = useState<{ name?: string | null; email: string } | null>(null);
   const [profileOpen, setProfileOpen] = useState(false);
+  const navItems = showDocsNav ? [...NAV_ITEMS, DOCS_NAV_ITEM] : NAV_ITEMS;
 
   useEffect(() => {
     const apiUrl = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "");
@@ -156,7 +159,7 @@ export default function AppNav() {
       </header>
 
       <nav className="app-tabbar" aria-label="주요 메뉴">
-        {NAV_ITEMS.map((item) => {
+        {navItems.map((item) => {
           const active = isActive(pathname, item.href);
           return (
             <Link

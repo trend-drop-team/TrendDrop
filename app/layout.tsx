@@ -4,6 +4,7 @@ import Script from "next/script";
 
 import { getDocList } from "@/lib/docs";
 import { SITE_DESCRIPTION, SITE_NAME, SITE_TITLE, siteUrl } from "@/lib/site";
+import { currentUserCanViewDocs } from "@/server/http/current-user";
 import { getCategories } from "@/server/services/category.service";
 import { getTrends } from "@/server/services/trend.service";
 
@@ -64,15 +65,22 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  // filePath는 클라이언트로 내보내지 않는다.
-  const paletteDocs = getDocList().map(({ slug, title, description }) => ({
-    slug,
-    title,
-    description,
-  }));
+  // 문서는 관리자만 본다(#79) — 비관리자에게는 커맨드 팔레트 검색 대상에도, 탭바에도 노출하지 않는다.
+  // 세 요청 모두 독립적이라 병렬로 — admin 판정(DB 조회 1회)을 trends/categories 앞에 줄 세우지 않는다.
+  const [showDocsNav, categoryResult, trendResult] = await Promise.all([
+    currentUserCanViewDocs(),
+    getCategories(),
+    getTrends(),
+  ]);
 
-  // 커맨드 팔레트는 모든 화면에 떠 있으므로 검색 대상도 여기서 한 번만 받아 내려준다.
-  const [categoryResult, trendResult] = await Promise.all([getCategories(), getTrends()]);
+  // filePath는 클라이언트로 내보내지 않는다.
+  const paletteDocs = showDocsNav
+    ? getDocList().map(({ slug, title, description }) => ({
+        slug,
+        title,
+        description,
+      }))
+    : [];
 
   const categories = categoryResult.data.map((category) => category.name);
   const paletteKeywords = trendResult.data.map((row) => ({
@@ -97,7 +105,7 @@ export default async function RootLayout({
           src="https://t1.kakaocdn.net/kakao_js_sdk/2.8.2/kakao.min.js"
           strategy="afterInteractive"
         />
-        <AppNav />
+        <AppNav showDocsNav={showDocsNav} />
         {children}
         {/* getDocList()는 fs를 쓰는 서버 전용이라 여기서 호출해 props로 내려준다. */}
         <CommandPalette docs={paletteDocs} categories={categories} keywords={paletteKeywords} />
