@@ -188,6 +188,22 @@
   font-size: 0.7em;
 }
 
+/* 하락: 같은 pill, 빨강 + ▼ — 예전엔 -58%도 초록 ▲로 나왔다 */
+.td-down {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: var(--down-soft);
+  color: var(--down);
+}
+
+.td-down::before {
+  content: "▼";
+  font-size: 0.7em;
+}
+
 .td-stat-label {
   display: block;
   margin-top: 6px;
@@ -326,9 +342,16 @@
 
 /* "11/7 19:00"처럼 날짜가 붙은 라벨은 좁은 폭에서 날짜/시각 두 줄로 접힌다(#125) */
 .td-spark-days span {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
   min-width: 0;
   text-align: center;
-  word-break: keep-all;
+}
+
+.td-spark-date {
+  font-size: 0.66rem;
+  color: var(--accent);
 }
 
 /* 관련 콘텐츠 */
@@ -822,4 +845,17 @@
   margin-top: 18px;
   font-size: 0.82rem;
   color: var(--muted);
+}
+
+/* 근거가 키워드 반복뿐일 때의 빈 상태 — 내부 소스 id 대신 감지 채널 이름만 한 줄로 */
+.td-why-empty {
+  margin: 14px 0 0;
+  font-size: 0.95rem;
+  line-height: 1.7;
+  color: var(--muted);
+}
+
+.td-why-empty strong {
+  color: var(--text);
+  font-weight: 600;
 }

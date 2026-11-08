@@ -30,7 +30,7 @@
   --font-num: ui-monospace, "SF Mono", "Roboto Mono", var(--font-noto-sans-kr), monospace; /* 한글이 섞이면 모노 폰트엔 한글 글리프가 없어 기기별 폴백(자간 넓은 고정폭 한글)으로 깨진다 → Noto로 받는다 */
   --num-variant: tabular-nums;
   --label-transform: uppercase;
-  --label-spacing: 0.12em;
+  --label-spacing: 0.04em; /* 라벨 대부분이 한글이다 — 0.12em 이상 벌리면 "검 색 상 승 률"처럼 끊겨 보인다 */
   --shadow-hover: 0 2px 6px rgba(0, 0, 0, 0.55), 0 26px 60px -16px rgba(0, 0, 0, 0.7),
     0 0 0 1px rgba(61, 220, 132, 0.15);
   --glow-line: rgba(61, 220, 132, 0.4);
@@ -80,7 +80,7 @@
   --font-num: inherit;
   --num-variant: normal;
   --label-transform: none;
-  --label-spacing: 0.18em;
+  --label-spacing: 0.04em;
   --shadow-hover: 0 24px 60px rgba(64, 38, 20, 0.2);
   --glow-line: rgba(255, 107, 44, 0.35);
   --header-bg: rgba(247, 240, 230, 0.82);
@@ -316,6 +316,9 @@ h3,
 .brand-name {
   font-size: 1.05rem;
   font-weight: 700;
+  /* 로고 글자는 줄바꿈하지 않는다 — 좁은 폭에서 "TrendDro / p"로 갈라졌다 */
+  white-space: nowrap;
+  overflow-wrap: normal;
 }
 
 .brand-sub,
@@ -365,7 +368,7 @@ h3,
 .eyebrow,
 .section-kicker {
   font-size: 0.82rem;
-  letter-spacing: 0.18em;
+  letter-spacing: var(--label-spacing);
   color: var(--accent);
   font-weight: 700;
 }
@@ -907,8 +910,7 @@ h3 {
 
 @media (max-width: 680px) {
   .page-shell {
-    width: min(100% - 20px, 1200px);
-    padding-top: 10px;
+    width: min(100% - 32px, 1200px);
   }
 
   .hero,
@@ -1063,9 +1065,18 @@ h3 {
   outline-offset: 2px;
 }
 
-.header-search-icon {
-  font-size: 1rem;
+.header-search-icon,
+.theme-toggle-glyph {
+  display: inline-grid;
+  place-items: center;
   line-height: 1;
+}
+
+/* 유니코드 기호(⌕ ☀ ◐)는 기기·폰트마다 크기와 모양이 달라 SVG로 그린다 */
+.header-search-icon svg,
+.theme-toggle-glyph svg {
+  width: 18px;
+  height: 18px;
 }
 
 .header-search-kbd {
@@ -1084,6 +1095,8 @@ h3 {
   z-index: 60;
   display: flex;
   justify-content: center;
+  /* 패널이 내용 높이만큼만 — stretch면 결과가 없어도 화면 70%를 빈 상자로 채운다 */
+  align-items: flex-start;
   padding: 12vh 16px 16px;
   background: var(--scrim);
   backdrop-filter: blur(4px);
@@ -1135,8 +1148,14 @@ h3 {
 }
 
 .cmdk-input-icon {
-  font-size: 1.1rem;
+  display: inline-grid;
+  place-items: center;
   color: var(--muted);
+}
+
+.cmdk-input-icon svg {
+  width: 18px;
+  height: 18px;
 }
 
 .cmdk-input {
@@ -1165,6 +1184,33 @@ h3 {
   font-family: var(--font-num);
   font-size: 0.7rem;
   cursor: pointer;
+}
+
+.cmdk-close-touch {
+  display: none;
+}
+
+/* 터치 기기엔 키보드가 없다 — Esc·↑↓ 안내 대신 "닫기" 버튼, 상단에 더 붙여 키보드에 가리지 않게 */
+@media (hover: none) and (pointer: coarse) {
+  .cmdk-overlay {
+    padding-top: max(16px, env(safe-area-inset-top));
+  }
+
+  .cmdk-close {
+    min-height: 36px;
+    padding: 6px 12px;
+    font-family: inherit;
+    font-size: 0.85rem;
+  }
+
+  .cmdk-close-key,
+  .cmdk-panel .cmdk-footer {
+    display: none;
+  }
+
+  .cmdk-close-touch {
+    display: inline;
+  }
 }
 
 .cmdk-close:focus-visible {
@@ -1916,6 +1962,16 @@ h3 {
   gap: 8px;
   overflow-x: auto;
   padding-bottom: 2px;
+  /* 칩이 화면 밖으로 이어진다는 걸 오른쪽 끝 페이드로 알린다(잘린 칩만 보이면 끝인 줄 안다).
+     끝까지 밀었을 때 마지막 칩이 페이드에 덮이지 않게 오른쪽 여백을 둔다. */
+  padding-right: 28px;
+  scrollbar-width: none;
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 32px), transparent);
+  mask-image: linear-gradient(to right, #000 calc(100% - 32px), transparent);
+}
+
+.category-tabs::-webkit-scrollbar {
+  display: none;
 }
 
 .category-tab {
@@ -2138,6 +2194,11 @@ h3 {
   color: var(--accent);
 }
 
+.rank-growth.is-down,
+.rank-preview-growth.is-down {
+  color: var(--down);
+}
+
 .board-empty {
   margin: 0;
   padding: 40px 20px;
@@ -2179,10 +2240,6 @@ h3 {
   outline-offset: 3px;
 }
 
-.theme-toggle-glyph {
-  font-size: 1rem;
-  line-height: 1;
-}
 
 /*
   토글 라벨은 JS 상태가 아니라 CSS가 data-theme으로 고른다.
@@ -2215,13 +2272,15 @@ h3 {
 /* ---------------------------------------------------------------- */
 
 @media (max-width: 640px) {
+  /* 좌우 10px은 손가락·둥근 화면 모서리에 너무 붙는다 — 16px 거터. 하단은 탭바가 없어진 뒤로 목록이
+     화면 끝에 붙어 끝났으므로(#80 이후) 넉넉히 비운다. */
   .app-header,
   .page-shell {
-    width: calc(100% - 20px);
+    width: calc(100% - 32px);
   }
 
   .page-shell {
-    padding: 16px 0 20px;
+    padding: 24px 0 72px;
   }
 
   .hero,
@@ -2356,6 +2415,28 @@ h3 {
   }
 }
 
+/* 모바일 헤더 아이콘 버튼은 최소 40px 정사각 — 32px 원은 엄지로 누르기 어렵다 */
+@media (max-width: 640px) {
+  .header-search,
+  .theme-toggle {
+    min-width: 40px;
+    min-height: 40px;
+    justify-content: center;
+  }
+}
+
+/* 320px급: 로고 글자까지 넣으면 헤더가 넘친다 — 로고 마크만 남긴다(링크 이름은 마크의 aria로 유지) */
+@media (max-width: 340px) {
+  .app-brand .brand-name {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+}
+
 /* --- 통합 보정: 하단 탭바가 없으므로 홈 인디케이터 영역만 비운다 --- */
 body {
   padding-bottom: env(safe-area-inset-bottom);
@@ -2435,6 +2516,9 @@ body {
 .heat-scroll {
   overflow-x: auto;
   border-radius: var(--radius-sm);
+  /* 오른쪽 열이 잘려 보일 때 "더 있음"을 알리는 페이드 */
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent);
+  mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent);
 }
 
 .heat-table {

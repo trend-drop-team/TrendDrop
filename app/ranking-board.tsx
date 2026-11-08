@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import { CATEGORY_EVENT, PENDING_CATEGORY_KEY } from "@/app/command-palette";
@@ -37,7 +38,8 @@ const PERIODS: { id: Period; label: string }[] = [
   { id: "daily", label: "24시간" },
 ];
 
-const LIVE_INTERVAL_MS = 8000;
+/** LIVE 중 새 순위를 다시 받아오는 주기. 랭킹은 1시간마다 갱신되니 그보다 촘촘할 필요는 없다. */
+const LIVE_REFRESH_MS = 5 * 60_000;
 const PLAY_INTERVAL_MS = 1200;
 const FLIP_MS = 520;
 const FLIP_EASING = "cubic-bezier(0.34, 1.56, 0.64, 1)";
@@ -61,9 +63,15 @@ function prefersReducedMotion(): boolean {
   );
 }
 
+/** "+58%" / "-58%" → 부호 있는 정수. 예전엔 숫자만 남겨서 -58%가 +58%로 보였다. */
 function growthValue(raw: string): number {
-  const parsed = Number.parseInt(raw.replace(/[^0-9]/g, ""), 10);
+  const parsed = Number.parseInt(raw.replace(/[^0-9-]/g, ""), 10);
   return Number.isFinite(parsed) ? parsed : 0;
+}
+
+/** 화면 표기용 부호(U+2212 마이너스는 하이픈보다 숫자와 폭이 맞는다). */
+function growthSign(value: number): string {
+  return value < 0 ? "\u2212" : "+";
 }
 
 /** 순위 변동 하이라이트 플래시 — 같은 클래스를 다시 넣어도 재생되도록 리플로우를 강제한다. */
@@ -166,9 +174,11 @@ export default function RankingBoard({ snapshots, daily, categories, latestColle
 
   const [period, setPeriod] = useState<Period>("realtime");
   const [category, setCategory] = useState<string>("전체");
-  const [snapshotIndex, setSnapshotIndex] = useState<number>(latestIndex);
+  const [pickedIndex, setSnapshotIndex] = useState<number>(latestIndex);
   const [live, setLive] = useState(true);
   const [playing, setPlaying] = useState(false);
+  // LIVE(재생·스크럽 아님)면 항상 최신 시점 — 새 데이터가 들어와 스냅샷 수가 바뀌어도 최신에 붙어 있는다.
+  const snapshotIndex = live && !playing ? latestIndex : Math.min(pickedIndex, latestIndex);
   const [pull, setPull] = useState(0);
   // 서버 렌더 시점에 고정되지 않도록, 신선도 라벨이 참조하는 "지금"을 주기적으로 다시 잰다.
   const [now, setNow] = useState<Date | null>(null);
@@ -234,9 +244,17 @@ export default function RankingBoard({ snapshots, daily, categories, latestColle
 
   const listKey = `${period}-${isRealtime ? snapshotIndex : "daily"}-${category}`;
 
-  const advance = useCallback(() => {
-    setSnapshotIndex((index) => (index + 1) % snapshots.length);
-  }, [snapshots.length]);
+  const router = useRouter();
+
+  // "새로고침" = 서버에서 최신 순위를 다시 받아오고 최신 시점으로 돌아온다.
+  // (예전엔 다음 스냅샷으로 넘기며 끝에서 맨 처음으로 돌아가서, LIVE라고 표시한 채 11시간 전 순위를 보여 줬다.)
+  const refresh = useCallback(() => {
+    setPlaying(false);
+    setSnapshotIndex(snapshots.length - 1);
+    setLive(true);
+    router.refresh();
+  }, [router, snapshots.length]);
+
 
   /* --- 신선도 라벨이 참조하는 "지금"을 주기적으로 다시 잰다 (마운트 후에만 — SSR과 다른 값이라 하이드레이션엔 비워 둔다) --- */
   useEffect(() => {
@@ -248,13 +266,15 @@ export default function RankingBoard({ snapshots, daily, categories, latestColle
     };
   }, []);
 
-  /* --- LIVE 자동 갱신 (시간 진행은 오직 여기서만 일어난다) --- */
-  /* 프리뷰가 열려 있는 동안(=행 호버 중)엔 자동 진행을 멈춘다 — 행이 밑으로 사라지며 프리뷰가 붕 뜨는 것 방지. */
+  /* --- LIVE: 최신 시점에 머물며 주기적으로 서버 데이터를 다시 받는다 --- */
+  /* 프리뷰가 열려 있는 동안(=행 호버 중)엔 갱신을 미룬다 — 행이 밑으로 사라지며 프리뷰가 붕 뜨는 것 방지. */
   useEffect(() => {
     if (!live || !isRealtime || hovered !== null) return;
-    const timer = window.setInterval(advance, LIVE_INTERVAL_MS);
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === "visible") router.refresh();
+    }, LIVE_REFRESH_MS);
     return () => window.clearInterval(timer);
-  }, [live, isRealtime, advance, hovered]);
+  }, [live, isRealtime, router, hovered]);
 
   /* --- 타임랩스 재생: 현재 지점부터 1.2초 간격으로 진행, 최신에 닿으면 자동 정지 --- */
   useEffect(() => {
@@ -477,7 +497,7 @@ export default function RankingBoard({ snapshots, daily, categories, latestColle
     const onEnd = () => {
       if (!pulling) return;
       pulling = false;
-      if (pullRef.current >= PULL_THRESHOLD) advance();
+      if (pullRef.current >= PULL_THRESHOLD) refresh();
       setPullValue(0);
     };
 
@@ -492,7 +512,7 @@ export default function RankingBoard({ snapshots, daily, categories, latestColle
       element.removeEventListener("touchend", onEnd);
       element.removeEventListener("touchcancel", onEnd);
     };
-  }, [isRealtime, advance]);
+  }, [isRealtime, refresh]);
 
   const pullReady = pull >= PULL_THRESHOLD;
   // LIVE로 순환 중일 때는 "과거"가 아니라 실시간 피드로 본다.
@@ -591,10 +611,15 @@ export default function RankingBoard({ snapshots, daily, categories, latestColle
               <span className="board-sep" aria-hidden="true">
                 ·
               </span>
-              {snapshot.label}
-              <span className="board-sep" aria-hidden="true">
-                ·
-              </span>
+              {/* 최신 시점의 상대 시각은 항상 "방금 전"이라 정보가 없다 — 과거를 볼 때만 "3시간 전" */}
+              {snapshotIndex !== latestIndex && (
+                <>
+                  {snapshot.label}
+                  <span className="board-sep" aria-hidden="true">
+                    ·
+                  </span>
+                </>
+              )}
               {freshnessLabel ? `마지막 수집 ${freshnessLabel}` : "수집 시각 확인 중"}
               <span className="board-sep" aria-hidden="true">
                 ·
@@ -832,10 +857,10 @@ export default function RankingBoard({ snapshots, daily, categories, latestColle
                   <DeltaBadge item={item} />
 
                   <RollingNumber
-                    value={growthValue(item.growth)}
-                    prefix="+"
+                    value={Math.abs(growthValue(item.growth))}
+                    prefix={growthSign(growthValue(item.growth))}
                     suffix="%"
-                    className="rank-growth"
+                    className={`rank-growth${growthValue(item.growth) < 0 ? " is-down" : ""}`}
                   />
                 </Link>
 
@@ -860,7 +885,10 @@ export default function RankingBoard({ snapshots, daily, categories, latestColle
                       <span className="rank-preview-cat">{item.category}</span>
                     </div>
                     <div className="rank-preview-metrics">
-                      <span className="rank-preview-growth">+{growthValue(item.growth)}%</span>
+                      <span className={`rank-preview-growth${growthValue(item.growth) < 0 ? " is-down" : ""}`}>
+                        {growthSign(growthValue(item.growth))}
+                        {Math.abs(growthValue(item.growth))}%
+                      </span>
                       {item.spark.length > 0 ? <MiniSpark points={item.spark} /> : null}
                     </div>
                     <p className="rank-preview-why">
