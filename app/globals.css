@@ -181,6 +181,10 @@ body {
   min-height: 100dvh;
   font-family: var(--font-noto-sans-kr), sans-serif;
   color: var(--text);
+  /* 한글은 기본값(normal)이면 음절 단위로 줄바꿈돼 "못했/습니다"처럼 단어 중간이 잘린다(#121).
+     어절 단위로 끊고, 띄어쓰기 없는 긴 문자열(URL·해시태그)만 어디서든 끊어 넘침을 막는다. */
+  word-break: keep-all;
+  overflow-wrap: anywhere;
 }
 
 /*
