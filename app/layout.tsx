@@ -8,6 +8,7 @@ import { SITE_DESCRIPTION, SITE_NAME, SITE_TITLE, siteUrl } from "@/lib/site";
 import { currentUserCanViewDocs } from "@/server/http/current-user";
 
 import AppNav from "./app-nav";
+import StageAside from "./stage-aside";
 import CommandPalette from "./command-palette";
 import InstallPrompt from "./install-prompt";
 import NavHistory from "./nav-history";
@@ -106,9 +107,17 @@ export default async function RootLayout({
           src="https://t1.kakaocdn.net/kakao_js_sdk/2.8.2/kakao.min.js"
           strategy="afterInteractive"
         />
-        <AppNav showDocsNav={showDocsNav} />
-        <NavHistory />
-        {children}
+        {/* 데스크톱(1024px+): 왼쪽 브랜드 패널 + 오른쪽 앱 칼럼. 모바일·태블릿: 앱 칼럼만(전체 폭). */}
+        <div className="stage">
+          <aside className="stage-aside" aria-label="TrendDrop 소개">
+            <StageAside />
+          </aside>
+          <div className="app-frame">
+            <AppNav showDocsNav={showDocsNav} />
+            <NavHistory />
+            {children}
+          </div>
+        </div>
         {/* getDocList()는 fs를 쓰는 서버 전용이라 여기서 호출해 props로 내려준다.
             키워드·카테고리는 레이아웃에서 받지 않는다 — 팔레트를 처음 열 때 백엔드 API로 지연 로딩한다(#87). */}
         <CommandPalette docs={paletteDocs} />

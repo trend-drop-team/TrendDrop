@@ -65,8 +65,14 @@ function prefersReducedMotion(): boolean {
   );
 }
 
-/** "+58%" / "-58%" → 부호 있는 정수. 예전엔 숫자만 남겨서 -58%가 +58%로 보였다. */
+/** 상승률이 퍼센트인가 — 신규 진입은 "1회 언급"처럼 퍼센트가 아닌 값이 온다(예전엔 이게 "+1%"로 보였다). */
+function isPercent(raw: string): boolean {
+  return /%\s*$/.test(raw.trim());
+}
+
+/** "+58%" / "-58%" → 부호 있는 정수. 예전엔 숫자만 남겨서 -58%가 +58%로 보였다. 퍼센트가 아니면 0. */
 function growthValue(raw: string): number {
+  if (!isPercent(raw)) return 0;
   const parsed = Number.parseInt(raw.replace(/[^0-9-]/g, ""), 10);
   return Number.isFinite(parsed) ? parsed : 0;
 }
@@ -858,12 +864,16 @@ export default function RankingBoard({ snapshots, daily, categories, latestColle
 
                   <DeltaBadge item={item} />
 
-                  <RollingNumber
-                    value={Math.abs(growthValue(item.growth))}
-                    prefix={growthSign(growthValue(item.growth))}
-                    suffix="%"
-                    className={`rank-growth${growthValue(item.growth) < 0 ? " is-down" : ""}`}
-                  />
+                  {isPercent(item.growth) ? (
+                    <RollingNumber
+                      value={Math.abs(growthValue(item.growth))}
+                      prefix={growthSign(growthValue(item.growth))}
+                      suffix="%"
+                      className={`rank-growth${growthValue(item.growth) < 0 ? " is-down" : ""}`}
+                    />
+                  ) : (
+                    <span className="rank-growth is-note">{item.growth}</span>
+                  )}
                 </Link>
 
                 <button
@@ -890,8 +900,9 @@ export default function RankingBoard({ snapshots, daily, categories, latestColle
                     </div>
                     <div className="rank-preview-metrics">
                       <span className={`rank-preview-growth${growthValue(item.growth) < 0 ? " is-down" : ""}`}>
-                        {growthSign(growthValue(item.growth))}
-                        {Math.abs(growthValue(item.growth))}%
+                        {isPercent(item.growth)
+                          ? `${growthSign(growthValue(item.growth))}${Math.abs(growthValue(item.growth))}%`
+                          : item.growth}
                       </span>
                       {item.spark.length > 0 ? <MiniSpark points={item.spark} /> : null}
                     </div>

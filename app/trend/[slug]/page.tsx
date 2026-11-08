@@ -258,7 +258,11 @@ export default async function TrendDetailPage({ params }: { params: Promise<{ sl
 
         <section className="td-metrics" aria-label="핵심 지표">
           <div className="td-stat">
-            <span className={`td-stat-value ${detail.growth.trim().startsWith("-") ? "td-down" : "td-up"}`}>
+            <span
+              className={`td-stat-value ${
+                !/%\s*$/.test(detail.growth.trim()) ? "td-flat" : detail.growth.trim().startsWith("-") ? "td-down" : "td-up"
+              }`}
+            >
               {detail.growth.trim().replace(/^-/, "\u2212")}
             </span>
             <span className="td-stat-label">검색 상승률</span>

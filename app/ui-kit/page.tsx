@@ -47,6 +47,7 @@ export default function UiKitPage() {
             <GrowthBadge growth="+113%" />
             <GrowthBadge growth="-58%" />
             <GrowthBadge growth="+0%" />
+            <GrowthBadge growth="1회 언급" />
           </div>
         </Card>
 

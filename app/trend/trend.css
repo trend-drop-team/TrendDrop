@@ -199,6 +199,12 @@
   color: var(--down);
 }
 
+/* 퍼센트가 아닌 값("1회 언급")은 화살표·색 없이 */
+.td-flat {
+  font-size: 1.1rem;
+  color: var(--muted);
+}
+
 .td-down::before {
   content: "▼";
   font-size: 0.7em;
@@ -483,7 +489,7 @@
 
 /* 반응형 */
 
-@media (max-width: 720px) {
+@container app (max-width: 720px) {
   .td {
     --td-page-top: 24px;
     --td-page-bottom: 56px;

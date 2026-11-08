@@ -32,7 +32,7 @@
 .privacy-back { display: inline-block; margin-top: 16px; color: var(--muted); text-decoration: none; }
 .privacy-back:hover { color: var(--text); }
 
-@media (max-width: 480px) {
+@container app (max-width: 480px) {
   .privacy { padding-top: 32px; }
 }
 

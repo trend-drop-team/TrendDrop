@@ -65,6 +65,8 @@ export function Badge({ tone = "neutral", children }: { tone?: BadgeTone; childr
  */
 export function GrowthBadge({ growth }: { growth: string }) {
   const trimmed = growth.trim();
+  // "1회 언급"처럼 퍼센트가 아닌 값은 숫자로 바꾸지 않고 그대로(예전 홈에선 "+1%"로 바뀌어 보였다)
+  if (!/%$/.test(trimmed)) return <Badge>{trimmed || "-"}</Badge>;
   const value = Number.parseFloat(trimmed.replace(/[^0-9.-]/g, ""));
   if (!Number.isFinite(value)) return <Badge>{trimmed || "-"}</Badge>;
   if (value === 0) return <Badge>0%</Badge>;
