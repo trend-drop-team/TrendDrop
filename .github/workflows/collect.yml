@@ -34,6 +34,9 @@ on:
   # 문서: pipeline/PIPELINE.md 8-3
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 # 앞 실행이 안 끝났는데 다음 호출이 들어오는 경우를 막는다.
 # cancel-in-progress: false — 돌고 있던 수집은 끝까지 두고 새 것을 대기시킨다.
 # (수집 도중에 끊으면 그 버킷이 반쪽만 남는다)

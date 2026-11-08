@@ -23,6 +23,9 @@ on:
   #   collect.yml 주석과 pipeline/PIPELINE.md 8-3에 있다.
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 concurrency:
   group: pipeline-rank
   cancel-in-progress: false

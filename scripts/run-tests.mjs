@@ -11,6 +11,7 @@ const TARGETS = [
   { dir: "lib", ext: ".test.ts" },
   { dir: "server", ext: ".test.ts" },
   { dir: "app", ext: ".test.ts" },
+  { dir: "test", ext: ".test.ts" },
   { dir: "pipeline", ext: ".test.mjs", exclude: ["pipeline/experiments"] },
 ];
 
@@ -32,4 +33,8 @@ if (files.length === 0) {
   process.exit(0);
 }
 
-execFileSync("npx", ["tsx", "--test", ...files], { cwd: ROOT, stdio: "inherit" });
+execFileSync(
+  process.execPath,
+  ["--import", "tsx", "--import", "./test/setup.ts", "--test", ...files],
+  { cwd: ROOT, stdio: "inherit" }
+);

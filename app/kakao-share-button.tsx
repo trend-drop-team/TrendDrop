@@ -60,8 +60,12 @@ export default function KakaoShareButton({ path, title, text, label = "카카오
       return;
     }
 
-    const url = new URL(path, window.location.origin).toString();
-    const imageUrl = new URL("/opengraph-image", window.location.origin).toString();
+    const url = new URL(path, window.location.origin);
+    const imagePath =
+      url.pathname === "/"
+        ? "/opengraph-image"
+        : `${url.pathname.replace(/\/$/, "")}/opengraph-image`;
+    const imageUrl = new URL(imagePath, window.location.origin).toString();
 
     try {
       kakao.Share.sendDefault({
@@ -70,9 +74,14 @@ export default function KakaoShareButton({ path, title, text, label = "카카오
           title,
           description: text,
           imageUrl,
-          link: { mobileWebUrl: url, webUrl: url },
+          link: { mobileWebUrl: url.toString(), webUrl: url.toString() },
         },
-        buttons: [{ title: "TrendDrop에서 보기", link: { mobileWebUrl: url, webUrl: url } }],
+        buttons: [
+          {
+            title: "TrendDrop에서 보기",
+            link: { mobileWebUrl: url.toString(), webUrl: url.toString() },
+          },
+        ],
       });
       flash("shared");
     } catch {

@@ -10,8 +10,18 @@ import { removeWatchlistItem } from "@/server/services/watchlist.service";
 const WATCHLIST_WRITE_LIMIT = 20;
 const WATCHLIST_WRITE_WINDOW_MS = 60_000;
 
+type DeleteWatchlistDependencies = {
+  isDbConfigured: () => boolean;
+  getActiveUserId: (request: Request) => Promise<number | null>;
+  removeWatchlistItem: (userId: number, itemId: number) => Promise<number>;
+};
+
 /** 3.6 DELETE /api/watchlist/:id — 삭제. 남의 항목이면 404(존재 여부를 흘리지 않는다). */
-export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function deleteWatchlistItem(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> },
+  dependencies: DeleteWatchlistDependencies = { isDbConfigured, getActiveUserId, removeWatchlistItem },
+) {
   if (!isAllowedOrigin(request.headers.get("origin"))) {
     return errorResponse("forbidden origin", 403);
   }
@@ -22,10 +32,10 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
     return NextResponse.json({ error: "too many requests" }, { status: 429, headers: { "retry-after": String(rateLimit.retryAfterSeconds) } });
   }
 
-  const userId = await getActiveUserId(request);
+  const userId = await dependencies.getActiveUserId(request);
   if (userId === null) return errorResponse("login required", 401);
 
-  if (!isDbConfigured()) {
+  if (!dependencies.isDbConfigured()) {
     return errorResponse("watchlist requires a database", 500, "DATABASE_URL is not configured");
   }
 
@@ -36,11 +46,15 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
   }
 
   try {
-    const removed = await removeWatchlistItem(userId, itemId);
+    const removed = await dependencies.removeWatchlistItem(userId, itemId);
     if (removed === 0) return errorResponse("watchlist item not found", 404);
 
     return NextResponse.json({ data: { id: itemId } });
   } catch (error) {
     return handleRouteError(error, "Failed to remove watchlist item");
   }
+}
+
+export async function DELETE(request: Request, context: { params: Promise<{ id: string }> }) {
+  return deleteWatchlistItem(request, context);
 }
