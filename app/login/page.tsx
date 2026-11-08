@@ -1,4 +1,7 @@
+import Link from "next/link";
+
 import LoginPanel from "./login-panel";
+import "../privacy/privacy.css";
 
 export const metadata = {
   title: "로그인 | TrendDrop",
@@ -17,7 +20,7 @@ export default function LoginPage() {
         </div>
         <div className="login-actions">
           <LoginPanel />
-          <p className="login-legal">계속하면 TrendDrop의 서비스 이용약관과 개인정보 처리방침에 동의하게 됩니다.</p>
+          <p className="login-legal">계속하면 TrendDrop의 서비스 이용약관과 <Link href="/privacy">개인정보 처리방침</Link>에 동의하게 됩니다.</p>
         </div>
       </main>
     </div>

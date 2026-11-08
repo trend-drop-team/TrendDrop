@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
+import AdSlot from "@/app/ad-slot";
+import { ADSENSE_SLOT_DETAIL } from "@/lib/adsense";
 import StaleCacheWriter from "@/app/stale-cache-writer";
 import { fetchApi } from "@/lib/api-client";
 import ShareButton from "@/app/share-button";
@@ -294,6 +296,8 @@ export default async function TrendDetailPage({ params }: { params: Promise<{ sl
             </div>
           </section>
         )}
+
+        <AdSlot slot={ADSENSE_SLOT_DETAIL} />
 
         <footer className="td-footer">
           마지막 갱신 {detail.updatedAgo}

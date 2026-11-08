@@ -1,0 +1,34 @@
+/* 광고 슬롯 (#117). layout이 body[data-ads]를 달 때만 보이고 공간을 잡는다. */
+.ad-slot { display: none; }
+body[data-ads] .ad-slot { display: block; margin: 28px 0; list-style: none; }
+
+.ad-slot-label {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--muted);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-align: center;
+}
+
+/* 고정 높이를 예약해 광고가 늦게 채워져도 아래 콘텐츠가 밀리지 않는다(CLS 방지). */
+.ad-slot-box {
+  position: relative;
+  min-height: 280px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+.adsbygoogle.ad-slot-ins { display: block; width: 100%; min-height: 280px; }
+
+.ad-slot-placeholder { display: none; }
+body[data-ads="preview"] .ad-slot-ins { display: none; }
+body[data-ads="preview"] .ad-slot-placeholder {
+  display: grid;
+  place-items: center;
+  min-height: 280px;
+  color: var(--muted);
+  font-size: 13px;
+  word-break: keep-all;
+}

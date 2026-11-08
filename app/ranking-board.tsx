@@ -1,14 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import { CATEGORY_EVENT, PENDING_CATEGORY_KEY } from "@/app/command-palette";
+import AdSlot from "@/app/ad-slot";
 import { INTERESTS_EVENT, INTERESTS_KEY } from "@/app/onboarding";
 import RollingNumber from "@/app/rolling-number";
 import ShareButton from "@/app/share-button";
 import ShareCardButton from "@/app/share-card-button";
 import KakaoShareButton from "@/app/kakao-share-button";
+import { ADSENSE_SLOT_FEED } from "@/lib/adsense";
 import { isStale, relativeTime } from "@/lib/utils/date";
 import { getRankDelta } from "@/lib/utils/rank";
 import type { TimelineSnapshot, TrendRow } from "@/types/api/trend";
@@ -800,12 +802,12 @@ export default function RankingBoard({ snapshots, daily, categories, latestColle
         <p className="board-empty">선택한 카테고리에 해당하는 트렌드가 아직 없습니다.</p>
       ) : (
         <ol className="rank-list">
-          {visible.map((item) => {
+          {visible.map((item, index) => {
             const isSaved = saved.includes(item.keyword);
             const showPreview = hovered === item.keyword && !playing;
             return (
+              <Fragment key={item.keyword}>
               <li
-                key={item.keyword}
                 className={`rank-row${showPreview ? " has-preview" : ""}`}
                 ref={(element) => {
                   if (element) rowRefs.current.set(item.keyword, element);
@@ -872,6 +874,9 @@ export default function RankingBoard({ snapshots, daily, categories, latestColle
                   </div>
                 )}
               </li>
+              {/* 광고(#117) — 상위 5개는 끊지 않고 5위 뒤에 한 칸. 미설정이면 null. */}
+              {index === 4 && visible.length > 5 && <AdSlot as="li" slot={ADSENSE_SLOT_FEED} />}
+              </Fragment>
             );
           })}
         </ol>
