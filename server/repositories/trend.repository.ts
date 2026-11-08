@@ -1,9 +1,10 @@
-import { desc, sql } from "drizzle-orm";
+import { and, desc, sql } from "drizzle-orm";
 import { cache } from "react";
 
 import { getDb } from "@/db";
 import { collectionRuns } from "@/db/schema";
 import {
+  HAS_SNAPSHOTS,
   recentRuns,
   RUN_AT,
   snapshotsForRuns,
@@ -44,7 +45,7 @@ export const dbDailyIngredients = cache(async function dbDailyIngredients(): Pro
     await getDb()
       .select({ id: collectionRuns.id, at: RUN_AT })
       .from(collectionRuns)
-      .where(sql`${RUN_AT} >= ${since.toISOString()}`)
+      .where(and(sql`${RUN_AT} >= ${since.toISOString()}`, HAS_SNAPSHOTS))
       .orderBy(desc(RUN_AT))
   ).map((run) => ({ id: run.id, at: new Date(run.at) }));
 

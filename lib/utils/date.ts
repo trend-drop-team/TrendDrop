@@ -50,6 +50,39 @@ export function clockLabel(date: Date | string): string {
   return kstClockFormatter.format(toDate(date));
 }
 
+const kstDayFormatter = new Intl.DateTimeFormat("en-CA", {
+  timeZone: KST_TIME_ZONE,
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
+
+/** KST 기준 "YYYY-MM-DD" — 같은 날인지 비교용. */
+export function kstDayKey(date: Date | string): string {
+  return kstDayFormatter.format(toDate(date));
+}
+
+/** KST 기준 "YYYY-MM-DDTHH" — 같은 시간 버킷인지 비교용. */
+export function kstHourKey(date: Date | string): string {
+  return `${kstDayKey(date)}T${clockLabel(date).slice(0, 2)}`;
+}
+
+/**
+ * 시간 순서대로 놓인 시각들의 x축 라벨(#125).
+ * 시:분만 쓰면 날짜가 넘어갈 때 "20:00 · 17:00"처럼 시간이 거꾸로 가는 것처럼 보인다 —
+ * 날짜가 바뀌는 첫 점(그리고 오늘이 아닌 첫 점)에는 "11/7 17:00"처럼 날짜를 붙인다.
+ */
+export function axisLabels(dates: (Date | string)[], now: Date | string = new Date()): string[] {
+  const today = kstDayKey(now);
+  return dates.map((date, index) => {
+    const day = kstDayKey(date);
+    const changed = index === 0 ? day !== today : day !== kstDayKey(dates[index - 1]);
+    if (!changed) return clockLabel(date);
+    const [, month, dayOfMonth] = day.split("-");
+    return `${Number(month)}/${Number(dayOfMonth)} ${clockLabel(date)}`;
+  });
+}
+
 /** "2026년 1월 15일 14:00" 형태. 타임라인 등 날짜+시각 표시용, Asia/Seoul로 명시 고정. */
 export function dateTimeLabel(date: Date | string): string {
   return kstDateTimeFormatter.format(toDate(date));

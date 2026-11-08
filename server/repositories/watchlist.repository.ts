@@ -9,7 +9,7 @@ import {
   watchlistItems,
 } from "@/db/schema";
 import { NotFoundError } from "@/server/http/not-found";
-import { RUN_AT } from "@/server/repositories/shared";
+import { HAS_SNAPSHOTS, RUN_AT } from "@/server/repositories/shared";
 import type { WatchlistRow } from "@/types/api/watchlist";
 
 export async function dbWatchlist(userId: number): Promise<WatchlistRow[]> {
@@ -35,6 +35,8 @@ export async function dbWatchlist(userId: number): Promise<WatchlistRow[]> {
   const [latestRun] = await db
     .select({ id: collectionRuns.id })
     .from(collectionRuns)
+    // 최신 run이 수집 전용(collect)이면 점수가 하나도 없다 — 랭킹이 저장된 run 중 최신.
+    .where(HAS_SNAPSHOTS)
     .orderBy(desc(RUN_AT))
     .limit(1);
 

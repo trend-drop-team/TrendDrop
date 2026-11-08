@@ -1,7 +1,10 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
+import AdSlot from "@/app/ad-slot";
+import { ADSENSE_SLOT_DETAIL } from "@/lib/adsense";
 import StaleCacheWriter from "@/app/stale-cache-writer";
+import { isEchoOfKeyword, sourceLabel } from "@/lib/source-label";
 import { fetchApi } from "@/lib/api-client";
 import ShareButton from "@/app/share-button";
 import ShareCardButton from "@/app/share-card-button";
@@ -119,9 +122,16 @@ function Spark({ series, days }: { series: number[]; days: string[] }) {
         {last && <circle cx={last.x} cy={last.y} r={4} className="td-spark-dot" />}
       </svg>
       <div className="td-spark-days">
-        {days.map((day, index) => (
-          <span key={`${day}-${index}`}>{day}</span>
-        ))}
+        {days.map((day, index) => {
+          // "11/7 19:00"처럼 날짜가 붙은 라벨은 날짜를 윗줄로 — 한 줄로 두면 좁은 폭에서 라벨끼리 붙는다(#125)
+          const [date, time] = day.includes(" ") ? day.split(" ") : [null, day];
+          return (
+            <span key={`${day}-${index}`}>
+              {date && <small className="td-spark-date">{date}</small>}
+              {time}
+            </span>
+          );
+        })}
       </div>
     </div>
   );
@@ -159,11 +169,23 @@ function WhyList({ detail }: { detail: KeywordDetail }) {
 
   if (detail.reasons.length === 0) return null;
 
+  // 키워드를 그대로 반복하는 근거는 정보가 없다 — 빼고, 다 빠지면 "어디서 감지됐는지"만 한 줄로.
+  const meaningful = detail.reasons.filter((reason) => !isEchoOfKeyword(reason.text, detail.keyword));
+  if (meaningful.length === 0) {
+    if (detail.summary) return null;
+    const sources = [...new Set(detail.reasons.map((reason) => sourceLabel(reason.source)))];
+    return (
+      <p className="td-why-empty">
+        아직 이유를 정리하지 못했어요. <strong>{sources.join(", ")}</strong>에서 감지됐어요.
+      </p>
+    );
+  }
+
   return (
     <ol className="td-reasons">
-      {detail.reasons.map((reason, index) => (
+      {meaningful.map((reason, index) => (
         <li key={`${reason.source}-${index}`}>
-          <span className="td-reason-source">{reason.source}</span>
+          <span className="td-reason-source">{sourceLabel(reason.source)}</span>
           <p>{reason.text}</p>
         </li>
       ))}
@@ -236,7 +258,13 @@ export default async function TrendDetailPage({ params }: { params: Promise<{ sl
 
         <section className="td-metrics" aria-label="핵심 지표">
           <div className="td-stat">
-            <span className="td-stat-value td-up">{detail.growth}</span>
+            <span
+              className={`td-stat-value ${
+                !/%\s*$/.test(detail.growth.trim()) ? "td-flat" : detail.growth.trim().startsWith("-") ? "td-down" : "td-up"
+              }`}
+            >
+              {detail.growth.trim().replace(/^-/, "\u2212")}
+            </span>
             <span className="td-stat-label">검색 상승률</span>
           </div>
           <div className="td-stat">
@@ -270,7 +298,7 @@ export default async function TrendDetailPage({ params }: { params: Promise<{ sl
             {detail.summary && <StreamingSummary text={detail.summary} />}
             <WhyList detail={detail} />
             {extraChannels.length > 0 && (
-              <p className="td-why-channels">그 밖의 감지 채널 · {extraChannels.join(", ")}</p>
+              <p className="td-why-channels">그 밖의 감지 채널 · {extraChannels.map(sourceLabel).join(", ")}</p>
             )}
           </section>
         )}
@@ -294,6 +322,8 @@ export default async function TrendDetailPage({ params }: { params: Promise<{ sl
             </div>
           </section>
         )}
+
+        <AdSlot slot={ADSENSE_SLOT_DETAIL} />
 
         <footer className="td-footer">
           마지막 갱신 {detail.updatedAgo}

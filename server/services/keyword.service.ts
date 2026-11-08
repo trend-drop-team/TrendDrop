@@ -1,7 +1,6 @@
 import { isDbConfigured } from "@/db";
 import { requireDbUnlessMockAllowed } from "@/lib/env";
-import { clockLabel, nowIso, relativeTime } from "@/lib/utils/date";
-import { normalize } from "@/lib/utils/normalize";
+import { axisLabels, kstHourKey, nowIso, relativeTime } from "@/lib/utils/date";
 import { mockHistory, mockKeywordDetail } from "@/mocks/trends/repository";
 import { NotFoundError } from "@/server/http/not-found";
 import {
@@ -33,7 +32,16 @@ export async function getKeywordDetail(slug: string): Promise<ApiResult<KeywordD
   if (!latest) throw new NotFoundError(`snapshot not found: ${slug}`);
 
   // history는 최신 → 과거 순이므로 차트용으로 뒤집는다.
-  const chronological = [...history].reverse();
+  // 같은 시간 버킷에 랭킹 run이 여러 번 돌면(#91) 같은 시각이 두 번 찍힌다 — 시간당 최신 run 하나만 남긴다(#125).
+  const seenHours = new Set<string>();
+  const chronological = history
+    .filter((row) => {
+      const key = kstHourKey(row.runAt);
+      if (seenHours.has(key)) return false;
+      seenHours.add(key);
+      return true;
+    })
+    .reverse();
   const now = latest.runAt;
 
   const [contents, relatedTerms] = await Promise.all([
@@ -64,8 +72,9 @@ export async function getKeywordDetail(slug: string): Promise<ApiResult<KeywordD
     updatedAgo: relativeTime(latest.capturedAt, now),
     summary: latest.summary ?? "",
     reasons,
-    series: normalize(chronological.map((row) => row.score ?? 0)),
-    days: chronological.map((row) => clockLabel(row.runAt)),
+    // 점수는 이미 0~100이다. 최소~최대로 늘리면 91 → 88 같은 작은 하락이 0까지 떨어진 것처럼 보여서(#125) 그대로 쓴다.
+    series: chronological.map((row) => Math.max(0, Math.min(100, Math.round(row.score ?? 0)))),
+    days: axisLabels(chronological.map((row) => row.runAt), now),
     related: contents.map((content) => ({
       platform: content.source ?? content.kind,
       title: content.title,

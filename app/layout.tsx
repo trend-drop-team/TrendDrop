@@ -2,12 +2,15 @@ import type { Metadata, Viewport } from "next";
 import { Noto_Sans_KR, Space_Grotesk } from "next/font/google";
 import Script from "next/script";
 
+import { ADSENSE_CLIENT, adsEnabledOnServer, adsPreviewOnServer } from "@/lib/adsense";
 import { getDocList } from "@/lib/docs";
 import { SITE_DESCRIPTION, SITE_NAME, SITE_TITLE, siteUrl } from "@/lib/site";
 import { currentUserCanViewDocs } from "@/server/http/current-user";
 
 import AppNav from "./app-nav";
+import StageAside from "./stage-aside";
 import CommandPalette from "./command-palette";
+import InstallPrompt from "./install-prompt";
 import NavHistory from "./nav-history";
 import "./globals.css";
 
@@ -78,6 +81,9 @@ export default async function RootLayout({
       }))
     : [];
 
+  // 광고: 운영에서만 "on"(스크립트 로드), 개발 미리보기는 "preview"(자리표시자만), 그 외엔 속성 없음 → 슬롯이 공간을 잡지 않는다.
+  const adsMode = adsEnabledOnServer() ? "on" : adsPreviewOnServer() ? "preview" : undefined;
+
   return (
     <html
       lang="ko"
@@ -88,17 +94,34 @@ export default async function RootLayout({
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>
-      <body>
+      <body data-ads={adsMode}>
+        {adsMode === "on" && (
+          <Script
+            async
+            src={`https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${ADSENSE_CLIENT}`}
+            crossOrigin="anonymous"
+            strategy="afterInteractive"
+          />
+        )}
         <Script
           src="https://t1.kakaocdn.net/kakao_js_sdk/2.8.2/kakao.min.js"
           strategy="afterInteractive"
         />
-        <AppNav showDocsNav={showDocsNav} />
-        <NavHistory />
-        {children}
+        {/* 데스크톱(1024px+): 왼쪽 브랜드 패널 + 오른쪽 앱 칼럼. 모바일·태블릿: 앱 칼럼만(전체 폭). */}
+        <div className="stage">
+          <aside className="stage-aside" aria-label="TrendDrop 소개">
+            <StageAside />
+          </aside>
+          <div className="app-frame">
+            <AppNav showDocsNav={showDocsNav} />
+            <NavHistory />
+            {children}
+          </div>
+        </div>
         {/* getDocList()는 fs를 쓰는 서버 전용이라 여기서 호출해 props로 내려준다.
             키워드·카테고리는 레이아웃에서 받지 않는다 — 팔레트를 처음 열 때 백엔드 API로 지연 로딩한다(#87). */}
         <CommandPalette docs={paletteDocs} />
+        <InstallPrompt />
       </body>
     </html>
   );

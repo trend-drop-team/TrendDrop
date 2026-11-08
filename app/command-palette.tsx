@@ -290,7 +290,10 @@ export default function CommandPalette({ docs }: Props) {
       >
         <div className="cmdk-input-row">
           <span className="cmdk-input-icon" aria-hidden="true">
-            ⌕
+            <svg viewBox="0 0 24 24" focusable="false">
+              <circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke="currentColor" strokeWidth="2.2" />
+              <path d="m15.5 15.5 5 5" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
+            </svg>
           </span>
           <input
             ref={inputRef}
@@ -308,8 +311,9 @@ export default function CommandPalette({ docs }: Props) {
             }}
             onKeyDown={onInputKeyDown}
           />
-          <button ref={closeRef} type="button" className="cmdk-close" onClick={close}>
-            Esc
+          <button ref={closeRef} type="button" className="cmdk-close" onClick={close} aria-label="검색 닫기">
+            <span className="cmdk-close-key">Esc</span>
+            <span className="cmdk-close-touch">닫기</span>
           </button>
         </div>
 
