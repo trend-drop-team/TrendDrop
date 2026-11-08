@@ -1,0 +1,142 @@
+/* "홈 화면에 추가" 안내 카드 — 하단 시트(전체 화면을 덮지 않는다).
+   z-index 60: 헤더(30) 위, 온보딩(70) 아래. */
+@keyframes ip-rise {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
+.ip-sheet {
+  position: fixed;
+  left: 50%;
+  bottom: calc(16px + env(safe-area-inset-bottom));
+  z-index: 60;
+  width: min(480px, calc(100% - 32px));
+  transform: translateX(-50%);
+  padding: 24px 22px 20px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-md);
+  background: var(--surface-strong);
+  box-shadow: var(--shadow);
+  color: var(--text);
+  word-break: keep-all;
+}
+
+.ip-sheet-motion {
+  animation: ip-rise 0.24s ease-out;
+}
+
+.ip-title {
+  margin: 0 0 10px;
+  font-family: var(--font-head);
+  font-size: 1.05rem;
+  font-weight: 800;
+  line-height: 1.4;
+}
+
+.ip-sub {
+  margin: 0 0 18px;
+  color: var(--muted);
+  font-size: 0.9rem;
+  line-height: 1.6;
+}
+
+.ip-steps {
+  display: grid;
+  gap: 12px;
+  margin: 0 0 20px;
+  padding: 0;
+  list-style: none;
+}
+
+.ip-step {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-inset);
+  font-size: 0.92rem;
+  line-height: 1.5;
+}
+
+.ip-step-num {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-family: var(--font-num);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.ip-share-icon {
+  display: inline-block;
+  vertical-align: -5px;
+  margin: 0 2px;
+  color: var(--accent-2);
+}
+
+.ip-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.ip-never,
+.ip-later,
+.ip-install {
+  min-height: 44px;
+  padding: 0 18px;
+  border-radius: 999px;
+  font: inherit;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.ip-never {
+  margin-right: auto;
+  padding: 0 6px;
+  border: none;
+  background: none;
+  color: var(--muted);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.ip-later {
+  border: 1px solid var(--line-strong);
+  background: transparent;
+  color: var(--text);
+}
+
+.ip-install {
+  border: none;
+  background: var(--accent);
+  color: var(--on-accent);
+  font-weight: 700;
+}
+
+.ip-never:focus-visible,
+.ip-later:focus-visible,
+.ip-install:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ip-sheet-motion {
+    animation: none;
+  }
+}

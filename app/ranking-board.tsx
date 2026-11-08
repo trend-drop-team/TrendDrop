@@ -848,6 +848,8 @@ export default function RankingBoard({ snapshots, daily, categories, latestColle
                     event.preventDefault();
                     event.stopPropagation();
                     toggleSave(item.keyword);
+                    // 새로 저장할 때만 설치 안내(install-prompt.tsx)에 알린다.
+                    if (!isSaved) window.dispatchEvent(new CustomEvent("td-keyword-saved"));
                   }}
                 >
                   <span aria-hidden="true">{isSaved ? "★" : "☆"}</span>
