@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Noto_Sans_KR, Space_Grotesk } from "next/font/google";
 import Script from "next/script";
 
+import { ADSENSE_CLIENT, adsEnabledOnServer, adsPreviewOnServer } from "@/lib/adsense";
 import { getDocList } from "@/lib/docs";
 import { SITE_DESCRIPTION, SITE_NAME, SITE_TITLE, siteUrl } from "@/lib/site";
 import { currentUserCanViewDocs } from "@/server/http/current-user";
@@ -79,6 +80,9 @@ export default async function RootLayout({
       }))
     : [];
 
+  // 광고: 운영에서만 "on"(스크립트 로드), 개발 미리보기는 "preview"(자리표시자만), 그 외엔 속성 없음 → 슬롯이 공간을 잡지 않는다.
+  const adsMode = adsEnabledOnServer() ? "on" : adsPreviewOnServer() ? "preview" : undefined;
+
   return (
     <html
       lang="ko"
@@ -89,7 +93,15 @@ export default async function RootLayout({
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>
-      <body>
+      <body data-ads={adsMode}>
+        {adsMode === "on" && (
+          <Script
+            async
+            src={`https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${ADSENSE_CLIENT}`}
+            crossOrigin="anonymous"
+            strategy="afterInteractive"
+          />
+        )}
         <Script
           src="https://t1.kakaocdn.net/kakao_js_sdk/2.8.2/kakao.min.js"
           strategy="afterInteractive"
