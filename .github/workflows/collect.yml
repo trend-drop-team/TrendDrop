@@ -55,7 +55,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 22 # 로컬 개발 버전(v22.12.0)과 맞춤
+          node-version: 24 # Node 20은 2026-04 EOL — render.yaml·package.json engines와 맞춤
           cache: npm
 
       # --omit=dev — 파이프라인은 devDependencies(drizzle-kit·typescript·eslint)를

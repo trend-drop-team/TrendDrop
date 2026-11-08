@@ -22,7 +22,7 @@
     "drizzle-orm": "^0.45.2",
     "express": "^5.2.1",
     "express-rate-limit": "^8.7.1",
-    "next": "^16.2.10",
+    "next": "^16.4.5",
     "postgres": "^3.4.9",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
@@ -39,5 +39,8 @@
     "eslint-config-next": "^16.2.10",
     "tsx": "^4.23.15",
     "typescript": "^6.0.3"
+  },
+  "engines": {
+    "node": "24.x"
   }
 }
