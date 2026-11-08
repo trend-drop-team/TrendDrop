@@ -34,11 +34,12 @@
  * 2026-10-20 항목당 1회 모델로 바꾸면서 구글을 8로 내렸다 — 실측은 PIPELINE.md 참고.
  */
 export const WEIGHTS = {
-  "xtrends|title": 8, // X 트렌드 하나 = 구글 검색어 하나와 같은 값 (이미 집계된 트렌드)
+  "xtrends|title": 5, // 2026-10-27 8→5. 시간당 새 항목이 9개로 가장 많아 8이면 top10의 48%가 X였다
   "gtrends|title": 8, // 검색어 하나 = 커뮤니티 글 2개 값. 항목당 1회 모델에서 20이면 top10의 90%가 구글이었다(2026-10-20)
-  "youtube|title": 6,
-  "youtube|comment": 1.5,
+  "youtube|title": 3, // 2026-10-27 6→3. 영상 50개·댓글 20개 영상으로 늘린 뒤 55%가 유튜브였다(조회속도 보정 최대 ×3.5)
+  "youtube|comment": 0.75,
   "dcbest|title": 4,
+  // 아래 두 줄: 2026-10-21부터 수집·로더에서 제외(excluded-sources.mjs). 값은 복귀 대비 유지.
   "theqoo|title": 4,
   "instiz|title": 4,
 };
@@ -46,7 +47,9 @@ export const WEIGHTS = {
 const DEFAULTS = {
   crossBonus: 1.6, // 2+ 소스 교차출현 가산. "여러 곳에서 동시에 말하는 것"이 위로 (v-he는 1.25)
   minMentions: 2, // 1회성 단어 제거
-  keepSources: ["gtrends", "xtrends"], // 둘 다 이미 집계된 트렌드라 글 1개여도 통과 (minMentions 무시)
+  // 2026-10-27 면제 없음. 수집 확대 후 모든 소스 글 2개 이상으로도 top10이 240/240 채워져 규칙을 하나로 뒀다.
+  // (그 전엔 구글·X가 글 1개여도 통과 — 6시간 창에 글 2개 이상 키워드가 6~7개뿐이라 빈자리를 메우는 장치였다)
+  keepSources: [],
   limit: 30,
   windowHours: 6,
 };

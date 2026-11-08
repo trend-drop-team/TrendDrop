@@ -6,7 +6,9 @@
  *   여러 개를 주면 각 모델로 따로 채점해 비교한다.
  */
 import { generateJson, withModelFallback, EXTRACT_MODELS } from "../gemini.mjs";
-import { SYSTEM, SCHEMA, PROMPT_VERSION, formatLine, buildUserMessage } from "../issue-prompt.mjs";
+const { SYSTEM, SCHEMA, PROMPT_VERSION, formatLine, buildUserMessage } = await import(
+  process.env.CULTURE_PROMPT === "1" ? "./culture-prompt.mjs" : "../issue-prompt.mjs"
+);
 import { CASES as BASE, VIDEOS, LITERAL_CASES } from "./golden-cases.mjs";
 import { cleanItem } from "../issues.mjs";
 

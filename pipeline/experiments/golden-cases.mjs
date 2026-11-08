@@ -22,6 +22,11 @@ const g = (text, ...news) => row("gtrends", text, { newsTitles: news });
 const comment = (videoId, text) => row("youtube", text, { videoId }, "comment");
 
 export const CASES = [
+  ...(process.env.CULTURE_PROMPT === "1" ? [
+    { row: row("xtrends", "먼작귀"), expect: { nonEmpty: true } },
+    { row: row("youtube", "리브와 매트 따라 그리기"), expect: { has: "리브와 매트" } },
+    { row: row("xtrends", "슬랑이"), expect: { nonEmpty: true } },
+  ] : []),
   // ── 주인공 판별 ───────────────────────────────────────────
   { row: row("theqoo", `국민의힘 "李, 인천 칼부림 때 '부캉이' 구경" 맹비난`), expect: { names: ["이재명"] } },
   { row: row("dcbest", "[이갤] 미국 사형 집행 생중계 논란…트럼프도 제동?", { gallery: "이갤" }), expect: { not: ["도널드 트럼프", "트럼프"] } },
@@ -29,8 +34,8 @@ export const CASES = [
   { row: comment("devils", `제목을 "더 지니어스5" 라고 해도 믿음`), expect: { not: ["더 지니어스", "더 지니어스5"] } },
   { row: comment("park", "마녀 깔이다 하고 봤는데 마녀 감독이네 ㅋㅋ"), expect: { not: ["마녀"] } },
   { row: row("dcbest", "[더갤] JTBC) 화장품 대표, 허리띠 풀고 매장 직원들 폭행", { gallery: "더갤" }), expect: { not: ["JTBC"] } },
-  { row: row("theqoo", "A2O LITE 'NEON' 멜론 탑백 10위 (🔺10)"), expect: { names: ["A2O LITE"], category: "인물" } },
-  { row: yt("nct", "NCT WISH 엔시티 위시 'I SPY' MV"), expect: { names: ["NCT WISH"], category: "인물" } },
+  { row: row("theqoo", "A2O LITE 'NEON' 멜론 탑백 10위 (🔺10)"), expect: process.env.CULTURE_PROMPT === "1" ? { names: ["NEON"], category: "작품·콘텐츠" } : { names: ["A2O LITE"], category: "인물" } },
+  { row: yt("nct", "NCT WISH 엔시티 위시 'I SPY' MV"), expect: process.env.CULTURE_PROMPT === "1" ? { names: ["I SPY"], category: "작품·콘텐츠" } : { names: ["NCT WISH"], category: "인물" } },
   // 차트 성적의 주인공은 그룹. 이수만은 수식어(제작자)
   { row: row("theqoo", "이수만 신인 걸그룹 'A2O LITE' 데뷔곡 멜론 탑백 20위+핫백 3위"), expect: { has: "A2O LITE", not: ["NEON"] } },
 

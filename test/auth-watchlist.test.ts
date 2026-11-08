@@ -7,12 +7,12 @@ import { GET, POST } from "../app/api/watchlist/route";
 import { DELETE, deleteWatchlistItem } from "../app/api/watchlist/[id]/route";
 import { frontendRedirect, oauthStateError } from "../backend/server";
 
+const ALLOWED_ORIGIN = "http://localhost:3000"; // test/setup.ts의 FRONTEND_ORIGIN
+
 function unauthenticatedRequest(method: string, body?: string) {
-  return new Request("http://localhost/api/watchlist", {
-    method,
-    headers: body ? { "content-type": "application/json" } : undefined,
-    body,
-  });
+  const headers: Record<string, string> = { origin: ALLOWED_ORIGIN };
+  if (body) headers["content-type"] = "application/json";
+  return new Request("http://localhost/api/watchlist", { method, headers, body });
 }
 
 async function status(response: Response) {
@@ -26,14 +26,22 @@ describe("watchlist authentication contracts", () => {
     assert.equal(await status(await DELETE(unauthenticatedRequest("DELETE"), { params: Promise.resolve({ id: "1" }) })), 401);
   });
 
+  it("rejects state-changing requests from a disallowed or missing Origin with 403 (#94)", async () => {
+    const evil = new Request("http://localhost/api/watchlist/1", { method: "DELETE", headers: { origin: "https://evil.example" } });
+    const noOrigin = new Request("http://localhost/api/watchlist/1", { method: "DELETE" });
+    assert.equal(await status(await DELETE(evil, { params: Promise.resolve({ id: "1" }) })), 403);
+    assert.equal(await status(await DELETE(noOrigin, { params: Promise.resolve({ id: "1" }) })), 403);
+  });
+
   it("returns 404 when an authenticated user cannot delete the item", async () => {
     const request = new Request("http://localhost/api/watchlist/41", {
-      headers: { cookie: `td-session=${createSession(2)}` },
+      method: "DELETE",
+      headers: { origin: ALLOWED_ORIGIN, cookie: `td-session=${createSession(2)}` },
     });
     const response = await deleteWatchlistItem(
       request,
       { params: Promise.resolve({ id: "41" }) },
-      { isDbConfigured: () => true, removeWatchlistItem: async () => 0 },
+      { isDbConfigured: () => true, getActiveUserId: async () => 2, removeWatchlistItem: async () => 0 },
     );
 
     assert.equal(response.status, 404);

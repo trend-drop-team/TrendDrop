@@ -12,7 +12,7 @@
   --chart-dot: var(--accent);
 
   --td-page-top: 56px;
-  --td-page-bottom: 128px;
+  --td-page-bottom: 96px;
   --td-section-gap: 44px;
   --td-panel-pad: 30px;
   --td-hero-gap: clamp(48px, 6vw, 76px);
@@ -453,7 +453,7 @@
 @media (max-width: 720px) {
   .td {
     --td-page-top: 24px;
-    --td-page-bottom: 64px;
+    --td-page-bottom: 56px;
     --td-section-gap: 32px;
     --td-panel-pad: 22px;
     --td-hero-gap: 36px;
@@ -764,4 +764,52 @@
 .td-source-link:hover {
   text-decoration: underline;
   text-underline-offset: 3px;
+}
+
+/* --- #81 상세 정리 --- */
+.td-source-thumb {
+  width: 56px;
+  height: 56px;
+  flex: none;
+  overflow: hidden;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--surface-inset);
+}
+
+.td-source-thumb img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.td-source-more {
+  display: block;
+  margin: 18px auto 0;
+  padding: 8px 18px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.84rem;
+  cursor: pointer;
+  transition: border-color 0.2s ease, color 0.2s ease;
+}
+
+.td-source-more:hover {
+  border-color: var(--glow-line);
+  color: var(--accent);
+}
+
+.td-source-more:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.td-why-channels {
+  margin-top: 18px;
+  font-size: 0.82rem;
+  color: var(--muted);
 }
