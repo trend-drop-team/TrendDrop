@@ -7,7 +7,7 @@ import "./ui-kit.css";
 
 export const metadata: Metadata = { title: "UI 키트", robots: { index: false } };
 
-/** UI 키트 미리보기(#123) — 개발 환경 전용. 운영에서는 404. 360px·다크/웜톤에서 깨지는지 여기서 본다. */
+/** UI 키트 미리보기(#123) — 개발 환경 전용. 운영 404는 next.config.ts rewrites가 낸다(여기 notFound는 보조). 360px·다크/웜톤에서 깨지는지 여기서 본다. */
 export default function UiKitPage() {
   if (process.env.NODE_ENV === "production") notFound();
 
