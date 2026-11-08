@@ -22,8 +22,15 @@ import {
 } from "./store.mjs";
 import { WEIGHTS } from "./popular.mjs";
 import { extractMissing, rankIssues, PROMPT_VERSION } from "./issues.mjs";
+import { extractionCacheVersion } from "./discovery-prompt.mjs";
+import { EXTRACT_MODELS } from "./gemini.mjs";
 
 const save = process.argv.includes("--save");
+const profile = process.argv.includes("--culture") ? "culture" : process.argv.includes("--general") ? "general" : "discovery";
+const extractionModels = profile === "discovery" && process.env.DISCOVERY_EXTRACT_MODELS
+  ? process.env.DISCOVERY_EXTRACT_MODELS.split(",").map((name) => name.trim()).filter(Boolean) : EXTRACT_MODELS;
+const promptVersion = profile === "discovery" ? extractionCacheVersion(extractionModels) : PROMPT_VERSION;
+if (save && profile === "culture") throw new Error("--culture는 비교 실험 전용입니다. --save와 함께 사용할 수 없습니다.");
 const useReview = !process.argv.includes("--no-review");
 const windowHours = Number(process.env.HOURS ?? 6) || 6;
 const topN = Number(process.env.TOP_N ?? 10) || 10;
@@ -40,11 +47,13 @@ const bucketAt = rows[rows.length - 1].bucketAt;
 const buckets = new Set(rows.map((r) => r.bucketAt)).size;
 
 const aliases = await loadAliases();
-const extractions = await loadExtractions([...new Set(rows.map((r) => r.textHash))], PROMPT_VERSION);
+const extractions = await loadExtractions([...new Set(rows.map((r) => r.textHash))], promptVersion);
 let ext;
 try {
   ext = await extractMissing(rows, extractions, aliases, {
-    onBatch: save ? (entries) => saveExtractions(entries, PROMPT_VERSION) : undefined,
+    profile,
+    models: extractionModels,
+    onBatch: save ? (entries) => saveExtractions(entries, promptVersion) : undefined,
   });
 } catch (err) {
   // 키 문제(400/401/403) — 순위를 낼 수 없으니 저장하지 않고 실패 종료
@@ -53,8 +62,18 @@ try {
   process.exit(1);
 }
 const before = new Map(aliases);
-const { ranked, meta, review } = await rankIssues(rows, extractions, aliases, { topN, windowHours, useReview });
+const { ranked, meta, review } = await rankIssues(rows, extractions, aliases, { topN, windowHours, useReview, profile });
 const errors = [ext.error, review.error].filter(Boolean);
+if (save && profile === "discovery" && (!useReview || review.error || ext.error || ext.skipped)) {
+  const reasons = [
+    ...errors,
+    ...(!useReview ? ["최종 검수가 비활성화돼 있습니다."] : []),
+    ...(ext.skipped ? [`추출하지 못한 원문 ${ext.skipped}개`] : []),
+  ];
+  console.error(`::error::발견 랭킹 저장 중단 — ${reasons.join(" / ")}`);
+  await closeDb();
+  throw new Error(`발견 랭킹 저장 중단: ${reasons.join(" / ")}`);
+}
 
 const short = (s, n = 44) => (s.length > n ? s.slice(0, n) + "…" : s);
 const kst = (iso) =>
@@ -70,6 +89,7 @@ const weights = WEIGHTS;
 
 console.log("\n" + "═".repeat(72));
 console.log("🔥 지금 인기 키워드 (pipeline · issues)");
+console.log(`랭킹 프로필: ${profile}`);
 console.log("═".repeat(72));
 const missed = windowHours - buckets;
 console.log(
@@ -87,7 +107,7 @@ console.log(
 const extracted = [...new Set(rows.map((r) => r.textHash))].map((h) => extractions.get(h)).filter(Boolean);
 const empty = extracted.filter((e) => e.keywords.length === 0).length;
 console.log(
-  `🤖 추출(${PROMPT_VERSION}): 고유 글 ${ext.unique} → 캐시 ${ext.cached} / 신규 ${ext.extracted}` +
+  `🤖 추출(${promptVersion}): 고유 글 ${ext.unique} → 캐시 ${ext.cached} / 신규 ${ext.extracted}` +
     (ext.models.size ? ` (${[...ext.models].map(([m, n]) => `${m} ×${n}`).join(", ")})` : "") +
     (ext.skipped ? ` | ⚠️ 못 뽑음 ${ext.skipped}` : "") +
     ` | 키워드 없는 글 ${Math.round((100 * empty) / Math.max(extracted.length, 1))}%` +
@@ -126,7 +146,7 @@ if (save) {
   await saveAliases(newAliases, review.model);
   // 랭킹 run은 수집 run과 별개다(pipeline='popular') — 이 run이 trend_snapshots를 소유한다.
   const runId = await startRun({ pipeline: "popular", geo: "KR", bucketAt, windowHours, buckets });
-  await saveTrendSnapshots(runId, bucketAt, ranked);
+  await saveTrendSnapshots(runId, bucketAt, ranked, { rankingProfile: profile });
   // 추출이 일부 실패하거나 검수가 실패해도 순위는 저장한다(그 시각이 비면 안 되므로).
   // 대신 run을 partial로 남기고 에러를 기록한다 — success로 덮으면 실패가 묻힌다.
   // (2026-09-02~10-14, API 키가 무효인 채로 6주간 success로만 찍혀 아무도 몰랐다)
@@ -137,9 +157,11 @@ if (save) {
     filtered: useReview && !review.error,
     // 어느 모델이 답했는지 — 예비 모델로 넘어간 빈도(=한도 소진)를 사후에 셀 수 있다.
     apiCallLog: {
-      promptVersion: PROMPT_VERSION,
+      rankingProfile: profile,
+      promptVersion,
       extract: { cached: ext.cached, extracted: ext.extracted, skipped: ext.skipped, models: Object.fromEntries(ext.models) },
       review: review.model ? { model: review.model, dropped: review.drop.size, merged: review.merge.length } : null,
+      editorVersion: review.editorVersion ?? null,
       fallbackReason: [ext.fallbackReason, review.fallbackReason].filter(Boolean).join(" / ") || null,
     },
     errorMessage: errors.length ? errors.join(" / ") : null,

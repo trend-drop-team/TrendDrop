@@ -222,32 +222,41 @@ test("extractMissing — 모든 모델 503이면 throw 대신 error·skipped를 
   assert.equal(ext.size, 0); // 저장 안 함 → 다음 실행이 다시 뽑는다
 });
 
-test("extractMissing — 정상 응답은 cleanItem을 거쳐 캐시에 채우고 error 없음", async () => {
+test("extractMissing — 정상 응답은 cleanItem을 거쳐 캐시에 채우고, 빠뜨린 ID는 error로 남긴다", async () => {
   mockGemini(() => ({ items: [
     { id: 1, timeliness: "now", keywords: [{ name: "홍길동", surface: "홍길동", category: "인물", issue: null }] },
     // id 2는 모델이 빠뜨림 → 저장 안 함
   ] }));
   const ext = new Map();
   const stats = await extractMissing(rows, ext, new Map());
-  assert.equal(stats.error, null);
+  // 빠뜨린 ID가 있으면 error로 남기고 그 배치에서 멈춘다(→ partial). 받은 줄은 저장한다.
+  assert.match(stats.error, /누락된 원문 ID/);
   assert.equal(stats.extracted, 1);
   assert.deepEqual(ext.get("g1").keywords.map((k) => k.name), ["홍길동"]);
   assert.equal(ext.has("g2"), false);
 });
 
+// 일반 랭킹은 minMentions 2(면제 없음)라 이름마다 글 2개씩 둔다.
+const rankRows = [
+  ...rows,
+  { site: "gtrends", kind: "title", text: "홍길동 2", textHash: "g1b", bucketAt: T },
+  { site: "gtrends", kind: "title", text: "임꺽정 2", textHash: "g2b", bucketAt: T },
+];
 const extracted = () => new Map([
   ["g1", { timeliness: "now", keywords: [{ name: "홍길동", category: "인물", issue: null }] }],
+  ["g1b", { timeliness: "now", keywords: [{ name: "홍길동", category: "인물", issue: null }] }],
   ["g2", { timeliness: "now", keywords: [{ name: "임꺽정", category: "인물", issue: null }] }],
+  ["g2b", { timeliness: "now", keywords: [{ name: "임꺽정", category: "인물", issue: null }] }],
 ]);
 
 test("사고 회귀: rankIssues — 검수가 401이면 review.error로 삼키지 않고 throw", async () => {
   mockGemini(() => ({ status: 401 }));
-  await assert.rejects(rankIssues(rows, extracted(), new Map()), (err) => err.status === 401);
+  await assert.rejects(rankIssues(rankRows, extracted(), new Map()), (err) => err.status === 401);
 });
 
 test("rankIssues — 검수가 503으로 전부 실패하면 순위는 내고 review.error를 남긴다 (→ partial)", async () => {
   mockGemini(() => ({ status: 503 }));
-  const { ranked, review } = await rankIssues(rows, extracted(), new Map());
+  const { ranked, review } = await rankIssues(rankRows, extracted(), new Map());
   assert.match(review.error, /^검수 실패/);
   assert.deepEqual(ranked.map((k) => k.term).sort(), ["임꺽정", "홍길동"]);
 });
@@ -255,8 +264,8 @@ test("rankIssues — 검수가 503으로 전부 실패하면 순위는 내고 re
 test("rankIssues — 검수 과반 merge는 이름 사전에 들어가고 재집계에 합쳐진다", async () => {
   mockGemini(() => ({ drop: [], merge: [{ names: ["임꺽정", "홍길동"], into: "홍길동" }] }));
   const aliases = new Map();
-  const { ranked, review } = await rankIssues(rows, extracted(), aliases);
+  const { ranked, review } = await rankIssues(rankRows, extracted(), aliases);
   assert.equal(review.error, null);
   assert.equal(aliases.get("임꺽정"), "홍길동");
-  assert.deepEqual(ranked.map((k) => [k.term, k.mentions]), [["홍길동", 2]]);
+  assert.deepEqual(ranked.map((k) => [k.term, k.mentions]), [["홍길동", 4]]);
 });

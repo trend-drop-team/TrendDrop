@@ -12,7 +12,7 @@ function signPayload(payload: string) {
 
 // require: sessionSecret()은 호출 시점에 process.env를 읽으므로, 위 설정이 먼저 끝난 뒤
 // 동기적으로 가져와야 한다(top-level await는 이 프로젝트의 CJS 빌드에서 쓸 수 없다).
-const { createSession, getUserId } = require("./auth") as typeof import("./auth");
+const { createSession, getUserId, decodeSession } = require("./auth") as typeof import("./auth");
 
 function requestWith(headers: Record<string, string>) {
   return { headers } as unknown as Parameters<typeof getUserId>[0];
@@ -47,6 +47,21 @@ test("userId를 바꿔치기한 세션 쿠키는 거부한다", () => {
   const [, expiresAt, signature] = token.split(".");
   const forged = `43.${expiresAt}.${signature}`;
   assert.equal(getUserId(requestWith({ cookie: `td-session=${forged}` })), null);
+});
+
+test("decodeSession은 발급시각을 만료시각-SESSION_MAX_AGE로 되돌려 계산한다 (#94 세션 폐기)", () => {
+  const before = Math.floor(Date.now() / 1000);
+  const decoded = decodeSession(createSession(42));
+  assert.ok(decoded);
+  assert.equal(decoded!.userId, 42);
+  // createSession은 만료시각을 발급시각 + SESSION_MAX_AGE(30일)로 고정해서 만든다 —
+  // decodeSession이 거꾸로 계산한 발급시각이 실제 호출 시각과 거의 같아야 한다.
+  assert.ok(Math.abs(decoded!.issuedAt - before) <= 2);
+});
+
+test("decodeSession도 서명이 변조된 토큰은 거부한다", () => {
+  const [userId, expiresAt] = createSession(42).split(".");
+  assert.equal(decodeSession(`${userId}.${expiresAt}.forged-signature`), null);
 });
 
 test("서명은 올바르지만 만료 시각이 지난 세션 쿠키는 거부한다", () => {

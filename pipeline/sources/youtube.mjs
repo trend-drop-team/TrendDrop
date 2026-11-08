@@ -33,7 +33,16 @@ export async function collect() {
     `${API}/videos?part=snippet,statistics&chart=mostPopular&regionCode=${region}` +
       `&maxResults=${VIDEO_COUNT}&key=${key}`
   );
-  const items = vids.items ?? [];
+  const byId = new Map((vids.items ?? []).map((item) => [item.id, item]));
+  for (const category of ["1", "23", "24", "26"]) {
+    try {
+      const extra = await getJson(`${API}/videos?part=snippet,statistics&chart=mostPopular&regionCode=${region}&videoCategoryId=${category}&maxResults=50&key=${key}`);
+      for (const item of extra.items ?? []) if (!byId.has(item.id)) byId.set(item.id, item);
+    } catch (error) {
+      console.warn(`youtube 카테고리 ${category} 실패: ${String(error.message).slice(0, 80)}`);
+    }
+  }
+  const items = [...byId.values()];
   for (const it of items) {
     const st = it.statistics ?? {};
     out.push({
@@ -43,6 +52,9 @@ export async function collect() {
       meta: {
         videoId: it.id,
         kind: "video_title",
+        channelTitle: it.snippet.channelTitle,
+        channelId: it.snippet.channelId,
+        categoryId: it.snippet.categoryId,
         publishedAt: it.snippet.publishedAt,
         viewCount: Number(st.viewCount ?? 0),
         likeCount: st.likeCount === undefined ? null : Number(st.likeCount),

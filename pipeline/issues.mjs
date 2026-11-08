@@ -13,6 +13,11 @@
  * 설계 근거와 실험 기록: PIPELINE.md 4장.
  */
 import { rankPopular, WEIGHTS } from "./popular.mjs";
+import { rankDiscovery, diversifyDiscovery } from "./discovery.mjs";
+import { SYSTEM as DISCOVERY_SYSTEM } from "./discovery-prompt.mjs";
+import { buildEvidencePackets } from "./evidence-packets.mjs";
+import { editDiscovery, projectEditorial, EDITOR_VERSION } from "./discovery-editor.mjs";
+import { canonicalTerm } from "./canonical-term.mjs";
 import { generateJson, withModelFallback, EXTRACT_MODELS, REVIEW_MODELS } from "./gemini.mjs";
 import {
   PROMPT_VERSION,
@@ -58,7 +63,7 @@ export const CATEGORY_MULT = {
  * 글마다 곱하면 계수가 섞여 추출 흔들림이 순위에 그대로 들어간다. 별칭으로 합쳐진 이름은 한 표로 센다.
  */
 export function termMultiplierFor(extractions, aliases) {
-  const canon = (n) => aliases.get(n) ?? n;
+  const canon = (n) => canonicalTerm(n, aliases);
   const votes = new Map(); // 이름 → Map<카테고리, 표>
   for (const e of extractions.values()) {
     for (const k of e.keywords) {
@@ -173,7 +178,7 @@ export function cleanItem(item, row) {
  * 이번 순위에서 키워드 없음으로 취급되고, 저장되지 않았으니 다음 실행에서 다시 시도된다.
  * 키 문제(400/401/403)는 다음 실행도 같으니 그대로 throw.
  */
-export async function extractMissing(rows, extractions, aliases, { onBatch } = {}) {
+export async function extractMissing(rows, extractions, aliases, { onBatch, profile = "general", generate = generateJson, models = EXTRACT_MODELS } = {}) {
   const videoTitles = new Map(
     rows.filter((r) => r.site === "youtube" && r.kind === "title").map((r) => [r.videoId, r.text])
   );
@@ -188,7 +193,7 @@ export async function extractMissing(rows, extractions, aliases, { onBatch } = {
     const user = buildUserMessage(lines);
     let res;
     try {
-      res = await withModelFallback((m) => generateJson(m, SYSTEM, user, SCHEMA), EXTRACT_MODELS);
+      res = await withModelFallback((m) => generate(m, profile === "discovery" ? DISCOVERY_SYSTEM : SYSTEM, user, SCHEMA), models);
     } catch (err) {
       if ([400, 401, 403].includes(err.status)) throw err;
       stats.error = `추출 실패: ${String(err.message).slice(0, 160)}`;
@@ -208,8 +213,13 @@ export async function extractMissing(rows, extractions, aliases, { onBatch } = {
       entries.push({ textHash: row.textHash, ...e, model });
     });
     stats.extracted += entries.length;
+    if (entries.length !== batch.length) {
+      stats.error = "추출 응답에 누락된 원문 ID가 있습니다.";
+      stats.skipped = todo.length - i - entries.length;
+    }
     stats.models.set(model, (stats.models.get(model) ?? 0) + 1);
     if (onBatch) await onBatch(entries);
+    if (stats.error) break;
   }
   return stats;
 }
@@ -236,7 +246,7 @@ function tidyLowercase(name) {
     .join(" ");
 }
 function casingFixes(extractions, aliases) {
-  const canon = (n) => aliases.get(n) ?? n;
+  const canon = (n) => canonicalTerm(n, aliases);
   const groups = new Map(); // 정규화 키 → Map<표기, 횟수>
   for (const e of extractions.values()) {
     for (const k of e.keywords) {
@@ -263,16 +273,20 @@ function casingFixes(extractions, aliases) {
 }
 
 /** 2·4. 점수 — 추출 결과로 rankPopular. dropped에 든 이름은 뺀다. */
-function score(rows, extractions, aliases, dropped, limit, windowHours) {
-  const canon = (n) => aliases.get(n) ?? n;
-  return rankPopular(rows, {
-    limit,
+function score(rows, extractions, aliases, dropped, limit, windowHours, profile = "general") {
+  const canon = (n) => canonicalTerm(n, aliases);
+  const termsOf = (row) => (extractions.get(row.textHash)?.keywords ?? []).map((keyword) => canon(keyword.name)).filter((name) => !dropped.has(name));
+  const result = rankPopular(rows, {
+    limit: profile === "discovery" ? Number.MAX_SAFE_INTEGER : limit,
+    minMentions: profile === "discovery" ? 1 : 2,
     windowHours,
     termsOf: (row) =>
       (extractions.get(row.textHash)?.keywords ?? []).map((k) => canon(k.name)).filter((n) => !dropped.has(n)),
     rowMultiplier: (row) => TIMELINESS_MULT[extractions.get(row.textHash)?.timeliness] ?? 1,
     termMultiplier: termMultiplierFor(extractions, aliases),
   });
+  if (profile === "discovery") result.ranked = rankDiscovery(result.ranked, rows, termsOf, describe(rows, extractions, aliases), { limit, windowHours });
+  return result;
 }
 
 /**
@@ -284,7 +298,7 @@ function score(rows, extractions, aliases, dropped, limit, windowHours) {
  * "중국" 아래 글 9개가 전부 다른 이야기인 걸 알 수 없었다(2026-10-14).
  */
 function describe(rows, extractions, aliases) {
-  const canon = (n) => aliases.get(n) ?? n;
+  const canon = (n) => canonicalTerm(n, aliases);
   const weights = WEIGHTS;
   const cats = new Map();
   const issues = new Map(); // name → [{ issue, rank }]
@@ -325,7 +339,14 @@ function describe(rows, extractions, aliases) {
  * pool: [{ term, score, sample }], info(term) → { category, issues: [이슈…], texts: 글 수 }
  */
 export const REVIEW_VOTES = Number(process.env.REVIEW_VOTES ?? 3) || 3;
+export function prepareDiscoveryPackets(rows, extractions, aliases, { windowHours = 6 } = {}) {
+  const workingAliases = new Map(aliases);
+  for (const [from, to] of casingFixes(extractions, workingAliases)) workingAliases.set(from, to);
+  const { ranked } = score(rows, extractions, workingAliases, new Set(), REVIEW_POOL, windowHours, "discovery");
+  return buildEvidencePackets(ranked, rows, extractions, workingAliases);
+}
 export async function reviewPool(pool, info, { votes = REVIEW_VOTES, models = REVIEW_MODELS } = {}) {
+  const system = REVIEW_SYSTEM;
   const list = pool
     .map((k, i) => {
       const { category, issues = [], texts = 0 } = info(k.term);
@@ -335,7 +356,7 @@ export async function reviewPool(pool, info, { votes = REVIEW_VOTES, models = RE
   const user = `## 후보 ${pool.length}개\n${list}`;
   const settled = await Promise.allSettled(
     Array.from({ length: votes }, () =>
-      withModelFallback((m) => generateJson(m, REVIEW_SYSTEM, user, REVIEW_SCHEMA), models)
+      withModelFallback((m) => generateJson(m, system, user, REVIEW_SCHEMA), models)
     )
   );
   const ok = settled.filter((r) => r.status === "fulfilled").map((r) => r.value);
@@ -393,31 +414,56 @@ export async function reviewPool(pool, info, { votes = REVIEW_VOTES, models = RE
  * 2~4단계 묶음. extractions는 extractMissing을 거친 Map, aliases는 이름 사전(검수 결과로 갱신된다).
  * 반환: { ranked, meta, review: { drop, merge, model, fallbackReason, error } }
  */
-export async function rankIssues(rows, extractions, aliases, { topN = 10, windowHours = 6, useReview = true } = {}) {
+export async function rankIssues(rows, extractions, aliases, { topN = 10, windowHours = 6, useReview = true, profile = "general", editorial = {} } = {}) {
+  if (!["general", "culture", "discovery"].includes(profile)) throw new Error(`Unknown ranking profile: ${profile}`);
+  if (profile === "culture") {
+    extractions = new Map([...extractions].map(([hash, extraction]) => [hash, {
+      ...extraction,
+      keywords: extraction.keywords.filter((keyword) => ["유행어·밈", "작품·콘텐츠"].includes(keyword.category)),
+    }]));
+  }
   for (const [from, to] of casingFixes(extractions, aliases)) aliases.set(from, to);
   const dropped = new Set();
-  const { ranked: pool, meta } = score(rows, extractions, aliases, dropped, REVIEW_POOL, windowHours);
+  let discoveryDomains = new Map();
+  let editorialMetadata = new Map();
+  let rankingAliases = aliases;
+  const { ranked: pool, meta } = score(rows, extractions, aliases, dropped, REVIEW_POOL, windowHours, profile);
   let info = describe(rows, extractions, aliases);
 
   const reviewResult = { drop: new Map(), merge: [], model: null, fallbackReason: null, error: null };
   if (useReview && pool.length > 0) {
     try {
-      Object.assign(reviewResult, await reviewPool(pool, info));
+      if (profile === "discovery") {
+        const packets = buildEvidencePackets(pool, rows, extractions, aliases);
+        const edited = await editDiscovery(packets, editorial);
+        const projection = projectEditorial(rows, extractions, aliases, packets, edited.decisions);
+        rows = projection.rows;
+        extractions = projection.extractions;
+        editorialMetadata = projection.metadata;
+        discoveryDomains = new Map([...editorialMetadata].map(([name, value]) => [name, value.domain]));
+        rankingAliases = new Map();
+        Object.assign(reviewResult, { model: edited.model, fallbackReason: edited.fallbackReason, votes: "1/1", editorVersion: EDITOR_VERSION,
+          decisions: edited.decisions, packets, drop: new Map(edited.decisions.filter((decision) => decision.action === "drop").map((decision) => [packets.find((packet) => packet.id === decision.id).term, decision.reason])) });
+      } else {
+        Object.assign(reviewResult, await reviewPool(pool, info, { profile }));
+      }
       for (const name of reviewResult.drop.keys()) dropped.add(name);
       for (const [from, to] of reviewResult.merge) aliases.set(from, to);
       // A→B가 있는데 이번에 B→C로 묶였으면 A도 C로 — 사전을 한 번만 따라가면 끝나게
       for (const [from, to] of aliases) if (aliases.has(to)) aliases.set(from, aliases.get(to));
-      info = describe(rows, extractions, aliases);
+      info = describe(rows, extractions, rankingAliases);
     } catch (err) {
       if ([400, 401, 403].includes(err.status)) throw err;
-      reviewResult.error = `검수 실패: ${String(err.message).slice(0, 160)}`;
+      reviewResult.error = `검수 실패: ${String(err.message)}`;
+      if (profile === "discovery") return { ranked: [], meta, review: reviewResult };
     }
   }
 
-  const { ranked } = score(rows, extractions, aliases, dropped, topN, windowHours);
+  const scored = score(rows, extractions, rankingAliases, profile === "discovery" && editorialMetadata.size ? new Set() : dropped, profile === "discovery" ? REVIEW_POOL : topN, windowHours, profile);
+  const ranked = profile === "discovery" ? diversifyDiscovery(scored.ranked, discoveryDomains, topN) : scored.ranked;
   return {
     // sample은 snapshots.reasons로 저장돼 화면에 나가므로 엔티티를 푼다. summary는 출력·검수용(저장 안 함)
-    ranked: ranked.map((k) => ({ ...k, sample: decode(k.sample), ...info(k.term) })),
+    ranked: ranked.map((k) => ({ ...k, sample: decode(k.sample), ...info(k.term), ...(editorialMetadata.get(k.term) ?? {}) })),
     meta,
     review: reviewResult,
   };

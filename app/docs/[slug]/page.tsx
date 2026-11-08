@@ -2,17 +2,19 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 
-import { getDocList, readDocContent } from "@/lib/docs";
+import { readDocContent } from "@/lib/docs";
+import { currentUserCanViewDocs } from "@/server/http/current-user";
 
-export async function generateStaticParams() {
-  return getDocList().map((doc) => ({ slug: doc.slug }));
-}
+// generateStaticParams는 쓰지 않는다 — currentUserCanViewDocs가 cookies()를 읽으므로 이
+// 페이지는 어차피 요청마다 동적 렌더링된다(#79). 정적 프리렌더링 대상이 아니다.
 
 export default async function DocDetailPage({
   params,
 }: {
   params: Promise<{ slug: string }>;
 }) {
+  if (!(await currentUserCanViewDocs())) notFound();
+
   const { slug } = await params;
   const doc = await readDocContent(slug);
 

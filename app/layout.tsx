@@ -4,6 +4,7 @@ import Script from "next/script";
 
 import { getDocList } from "@/lib/docs";
 import { SITE_DESCRIPTION, SITE_NAME, SITE_TITLE, siteUrl } from "@/lib/site";
+import { currentUserCanViewDocs } from "@/server/http/current-user";
 
 import AppNav from "./app-nav";
 import CommandPalette from "./command-palette";
@@ -60,17 +61,22 @@ const spaceGrotesk = Space_Grotesk({
   variable: "--font-space-grotesk",
 });
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // 문서는 관리자만 본다(#79) — 비관리자에게는 커맨드 팔레트 검색 대상에도, 메뉴에도 노출하지 않는다.
+  const showDocsNav = await currentUserCanViewDocs();
+
   // filePath는 클라이언트로 내보내지 않는다.
-  const paletteDocs = getDocList().map(({ slug, title, description }) => ({
-    slug,
-    title,
-    description,
-  }));
+  const paletteDocs = showDocsNav
+    ? getDocList().map(({ slug, title, description }) => ({
+        slug,
+        title,
+        description,
+      }))
+    : [];
 
   return (
     <html
@@ -87,7 +93,7 @@ export default function RootLayout({
           src="https://t1.kakaocdn.net/kakao_js_sdk/2.8.2/kakao.min.js"
           strategy="afterInteractive"
         />
-        <AppNav />
+        <AppNav showDocsNav={showDocsNav} />
         <NavHistory />
         {children}
         {/* getDocList()는 fs를 쓰는 서버 전용이라 여기서 호출해 props로 내려준다.

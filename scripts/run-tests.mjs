@@ -1,7 +1,6 @@
 #!/usr/bin/env node
-// run-tests — 단위 테스트만 모아 node:test(tsx 경유)로 돌린다.
-//   lib/server/app  *.test.ts
-//   pipeline        *.test.mjs  (pipeline/experiments/는 제외 — LLM을 부르는 수동 실험이라 회귀 게이트가 아님)
+// run-tests — *.test.ts와 *.test.mjs를 모아 node:test(tsx 경유)로 돌린다.
+//   pipeline/experiments/는 제외 — LLM을 부르는 수동 실험이라 회귀 게이트가 아님
 // node --test 기본 탐색은 pipeline/experiments/*-test.mjs 같은 무관한 파일까지 주워서 쓰지 않음.
 import { execFileSync } from "node:child_process";
 import { readdirSync, existsSync } from "node:fs";
@@ -29,7 +28,7 @@ function walk(dir, ext, exclude = [], acc = []) {
 
 const files = TARGETS.flatMap((t) => walk(t.dir, t.ext, t.exclude));
 if (files.length === 0) {
-  console.log("테스트 파일 없음");
+  console.log("테스트 파일(*.test.ts, *.test.mjs) 없음");
   process.exit(0);
 }
 

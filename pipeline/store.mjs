@@ -22,6 +22,7 @@
  *
  * env: DATABASE_URL. 없으면 호출 측에서 저장을 스킵한다.
  */
+import { EXCLUDED_SOURCES } from "./sources/excluded-sources.mjs"; // 의존성 없는 상수 모듈
 import { EXCLUDED_GALLERIES } from "./sources/dcbest-galleries.mjs"; // 의존성 없는 상수 모듈 (스크래퍼는 import하지 않는다)
 
 // postgres는 지연 import — DB를 안 쓰는 경로(스크래핑만)에선 패키지 없어도 동작.
@@ -210,6 +211,7 @@ export async function insertRawItems(rows, runId) {
  * 기준점은 now()가 아니라 max(bucket_at): 이번 시각 수집이 실패해도 직전 데이터로
  * 랭킹은 나오게 하되, 호출 측이 기준 시각을 출력해 오래된 데이터를 알아채게 한다.
  * 디시 뉴스 갤러리(EXCLUDED_GALLERIES)는 여기서 거른다 — 수집 단계 제외 전에 쌓인 과거 글도 순위에서 빠진다.
+ * 제외 소스(EXCLUDED_SOURCES: 더쿠·인스티즈, 2026-10-21)도 여기서 거른다 — raw_signals·SOURCE_SEED는 그대로.
  */
 export async function loadRecentItems(hours = 6, { offsetHours = 0 } = {}) {
   const s = await sql();
@@ -223,6 +225,7 @@ export async function loadRecentItems(hours = 6, { offsetHours = 0 } = {}) {
       AND r.bucket_at <= (SELECT max(bucket_at) FROM raw_signals)
                       - make_interval(hours => ${offsetHours})
       AND NOT (src.kind = 'dcbest' AND COALESCE(r.meta->>'gallery', '') = ANY(${EXCLUDED_GALLERIES}::text[]))
+      AND NOT (src.kind = ANY(${EXCLUDED_SOURCES}::text[]))
     ORDER BY r.bucket_at, r.id`;
   return rows.map((r) => ({
     site: r.site,
@@ -311,7 +314,7 @@ export async function upsertKeyword(term, { sourceId, categoryId } = {}) {
  * summary는 채우지 않는다 — 이 서비스는 키워드만 모은다(2026-10-14 yang 결정).
  * 이슈 추출의 issue는 검수 판단 근거로만 쓰고 저장하지 않는다.
  */
-export async function saveTrendSnapshots(runId, bucketAt, ranked) {
+export async function saveTrendSnapshots(runId, bucketAt, ranked, { rankingProfile = "general" } = {}) {
   const s = await sql();
   await assertSchema();
   const bySite = await sourceIdMap();
@@ -337,6 +340,7 @@ export async function saveTrendSnapshots(runId, bucketAt, ranked) {
   // keyword_id별 score. LLM 없이 순수 비교로 낸다.
   const [prevRun] = await s`SELECT id FROM collection_runs
     WHERE pipeline = 'popular' AND id < ${runId}
+      AND COALESCE(api_call_log->>'rankingProfile', 'general') = ${rankingProfile}
     ORDER BY id DESC LIMIT 1`;
   const prevScores = prevRun
     ? new Map(
@@ -357,6 +361,8 @@ export async function saveTrendSnapshots(runId, bucketAt, ranked) {
         source: src.source,
         weight: src.weightSum,
         ...(idx === 0 && k.sample ? { text: k.sample, sample: k.sample } : {}),
+        ...(idx === 0 && k.evidence ? { editorial: { parentEntity: k.parentEntity, phenomenon: k.phenomenon, kind: k.kind,
+          domain: k.domain, meaningUnresolved: k.meaningUnresolved ?? false, evidence: k.evidence, discovery: k.discovery } } : {}),
       }));
       const sourceLabel = k.sources?.map((src) => src.source).join(", ") || null;
       const growthRate = formatGrowthRate(k.score, k.mentions, prevScores.get(keywordIds[i]));

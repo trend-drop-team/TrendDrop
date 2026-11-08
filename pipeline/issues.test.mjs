@@ -3,6 +3,24 @@ import assert from "node:assert/strict";
 import { CATEGORY_MULT, TIMELINESS_MULT, termMultiplierFor, cleanItem, rankIssues } from "./issues.mjs";
 import { ISSUE_CATEGORIES } from "./issue-prompt.mjs";
 
+test("문화 실험은 인물보다 밈·작품 후보를 보존하며 원본 캐시를 바꾸지 않는다", async () => {
+  const rows = [];
+  const cache = new Map();
+  for (const [name, category] of [["새로운 표현", "유행어·밈"], ["새로운 작품", "작품·콘텐츠"], ["어떤 인물", "인물"]]) {
+    for (const index of [1, 2]) {
+      const textHash = `${name}-${index}`;
+      rows.push({ site: "dcbest", kind: "title", text: textHash, textHash, bucketAt: "2026-11-04T12:00:00Z" });
+      cache.set(textHash, { timeliness: "buzz", keywords: [{ name, category, issue: null }] });
+    }
+  }
+  const general = await rankIssues(rows, cache, new Map(), { useReview: false });
+  const culture = await rankIssues(rows, cache, new Map(), { useReview: false, profile: "culture" });
+  assert.equal(general.ranked.length, 3);
+  assert.deepEqual(new Set(culture.ranked.map((item) => item.term)), new Set(["새로운 표현", "새로운 작품"]));
+  assert.equal(cache.get("어떤 인물-1").keywords.length, 1);
+  await assert.rejects(rankIssues(rows, cache, new Map(), { profile: "unknown" }), /Unknown ranking profile/);
+});
+
 const extractions = new Map([
   ["h1", { timeliness: "now", keywords: [
     { name: "엔믹스", category: "인물", issue: null },
@@ -83,19 +101,24 @@ test("rankIssues(검수 없음): 점수 = 소스 가중치 × 시의성 × 카�
     { site: "dcbest", kind: "title", text: "두쫀쿠 먹어봄", textHash: "d1", bucketAt: T },
     { site: "dcbest", kind: "title", text: "두쫀쿠 품절", textHash: "d2", bucketAt: T },
     { site: "gtrends", kind: "title", text: "홍길동", textHash: "g1", bucketAt: T },
+    { site: "gtrends", kind: "title", text: "홍길동 2", textHash: "g1b", bucketAt: T },
     { site: "gtrends", kind: "title", text: "옛날 영화", textHash: "g2", bucketAt: T },
+    { site: "gtrends", kind: "title", text: "옛날 영화 2", textHash: "g2b", bucketAt: T },
   ];
   const ext = new Map([
     ["d1", { timeliness: "buzz", keywords: [{ name: "두쫀쿠", category: "유행어·밈", issue: null }] }],
     ["d2", { timeliness: "now", keywords: [{ name: "두쫀쿠", category: "유행어·밈", issue: null }] }],
     ["g1", { timeliness: "now", keywords: [{ name: "홍길동", category: "인물", issue: null }] }],
+    ["g1b", { timeliness: "now", keywords: [{ name: "홍길동", category: "인물", issue: null }] }],
     ["g2", { timeliness: "evergreen", keywords: [{ name: "옛날 영화", category: "작품·콘텐츠", issue: null }] }],
+    ["g2b", { timeliness: "evergreen", keywords: [{ name: "옛날 영화", category: "작품·콘텐츠", issue: null }] }],
   ]);
+  // 일반 랭킹은 minMentions 2(면제 없음) — 구글도 이름마다 글 2개씩
   const { ranked } = await rankIssues(rows, ext, new Map(), { useReview: false });
   const by = Object.fromEntries(ranked.map((k) => [k.term, k]));
   assert.ok(Math.abs(by["두쫀쿠"].rawScore - (4 * 0.7 * 2 + 4 * 1.0 * 2)) < 1e-9); // 13.6
-  assert.ok(Math.abs(by["홍길동"].rawScore - 8 * 1.0 * 0.8) < 1e-9); // 6.4
-  assert.ok(Math.abs(by["옛날 영화"].rawScore - 8 * 0.3 * 1.5) < 1e-9); // 3.6
+  assert.ok(Math.abs(by["홍길동"].rawScore - 2 * 8 * 1.0 * 0.8) < 1e-9); // 12.8
+  assert.ok(Math.abs(by["옛날 영화"].rawScore - 2 * 8 * 0.3 * 1.5) < 1e-9); // 7.2
   assert.deepEqual(ranked.map((k) => k.term), ["두쫀쿠", "홍길동", "옛날 영화"]);
   assert.equal(by["두쫀쿠"].category, "유행어·밈");
 });
