@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import StaleCacheWriter from "@/app/stale-cache-writer";
@@ -11,7 +10,8 @@ import KakaoShareButton from "@/app/kakao-share-button";
 import { SITE_NAME } from "@/lib/site";
 import type { KeywordDetail } from "@/types/api/keyword";
 
-import SourceCard from "../source-card";
+import BackLink from "../back-link";
+import RelatedSources from "../source-card";
 import StreamingSummary from "../streaming-summary";
 import "../trend.css";
 import { fetchKeywordDetail } from "./detail";
@@ -59,23 +59,6 @@ export async function generateMetadata({
     openGraph: { type: "article", title: `${title} · ${SITE_NAME}`, description, url },
     twitter: { card: "summary_large_image", title: `${title} · ${SITE_NAME}`, description },
   };
-}
-
-function platformGlyph(platform: string): string {
-  switch (platform) {
-    case "Instagram":
-      return "IG";
-    case "YouTube":
-      return "▶";
-    case "Facebook":
-      return "f";
-    default:
-      return platform.slice(0, 2).toUpperCase();
-  }
-}
-
-function platformClass(platform: string): string {
-  return `td-thumb-${platform.toLowerCase()}`;
 }
 
 function Spark({ series, days }: { series: number[]; days: string[] }) {
@@ -145,12 +128,12 @@ function Spark({ series, days }: { series: number[]; days: string[] }) {
 }
 
 /**
- * 근거 타임라인.
+ * "왜 뜨나" 근거 목록.
  *
- * `trend_events` 테이블(스펙 4.2절 제안)이 아직 없어 API의 `timeline`은 비어 있다.
- * 그동안은 시각을 지어내지 않고, 실제로 있는 `reasons`(채널별 근거)를 채널 순서대로 보여준다.
+ * 시각이 있는 타임라인 이벤트(`trend_events`, 스펙 4.2절)가 생기면 그것을 보여주고,
+ * 아직 비어 있는 동안에는 채널별 근거(`reasons`)를 보여준다. 둘을 따로 카드로 두면 같은 내용이 두 번 나온다.
  */
-function EvidenceTimeline({ detail }: { detail: KeywordDetail }) {
+function WhyList({ detail }: { detail: KeywordDetail }) {
   const events = detail.timeline;
 
   if (events.length > 0) {
@@ -177,18 +160,11 @@ function EvidenceTimeline({ detail }: { detail: KeywordDetail }) {
   if (detail.reasons.length === 0) return null;
 
   return (
-    <ol className="td-timeline">
+    <ol className="td-reasons">
       {detail.reasons.map((reason, index) => (
-        <li className="td-tl-item td-tl-spread" key={`${reason.source}-${index}`}>
-          <span className="td-tl-marker" aria-hidden="true">
-            <span className="td-tl-dot" />
-          </span>
-          <div className="td-tl-body">
-            <div className="td-tl-meta">
-              <span className="td-tl-channel">{reason.source}</span>
-            </div>
-            <p className="td-tl-text">{reason.text}</p>
-          </div>
+        <li key={`${reason.source}-${index}`}>
+          <span className="td-reason-source">{reason.source}</span>
+          <p>{reason.text}</p>
         </li>
       ))}
     </ol>
@@ -211,6 +187,10 @@ export default async function TrendDetailPage({ params }: { params: Promise<{ sl
     throw error;
   }
 
+  // 감지 채널 중 근거(reasons) 출처에 이미 나온 것은 근거 목록이 말해 주므로, 빠진 채널만 한 줄로 덧붙인다.
+  const reasonSources = new Set(detail.reasons.map((reason) => reason.source));
+  const extraChannels = detail.channels.filter((channel) => !reasonSources.has(channel));
+
   const staleSummary = {
     heading: "마지막으로 확인된 상세",
     items: [
@@ -227,11 +207,8 @@ export default async function TrendDetailPage({ params }: { params: Promise<{ sl
       <StaleCacheWriter cacheKey={`trend:${slug}`} summary={staleSummary} />
       <div className="td-content">
         <div className="td-topbar">
-          <Link href="/" className="td-back">
-            ← 트렌드 목록
-          </Link>
+          <BackLink />
           <span className="td-rank">#{detail.rank}</span>
-          <span className="td-tag">{detail.category}</span>
           <div className="share-actions">
             <ShareButton
               path={`/trend/${encodeURIComponent(detail.slug)}`}
@@ -253,9 +230,8 @@ export default async function TrendDetailPage({ params }: { params: Promise<{ sl
         </div>
 
         <section className="td-hero">
-          <p className="td-kicker">{detail.category} · 분석</p>
+          <p className="td-kicker">{detail.category}</p>
           <h1 className="td-title">{detail.keyword}</h1>
-          <p className="td-byline">분석 · {detail.detectedAgo}</p>
         </section>
 
         <section className="td-metrics" aria-label="핵심 지표">
@@ -287,43 +263,22 @@ export default async function TrendDetailPage({ params }: { params: Promise<{ sl
           </section>
         )}
 
-        <section className="td-panel">
-          <p className="td-eyebrow">왜 뜨나</p>
-          {/* 요약이 비면 빈 <p>가 min-height만큼 자리를 차지해 배지 밑에 빈 공간이 생긴다. */}
-          {detail.summary && <StreamingSummary text={detail.summary} />}
-          <ol className="td-reasons">
-            {detail.reasons.map((reason, index) => (
-              <li key={`${reason.source}-${index}`}>
-                <span className="td-reason-source">{reason.source}</span>
-                <p>{reason.text}</p>
-              </li>
-            ))}
-          </ol>
-        </section>
-
-        <section className="td-panel">
-          <p className="td-eyebrow">근거 타임라인</p>
-          <EvidenceTimeline detail={detail} />
-        </section>
+        {(detail.summary || detail.reasons.length > 0 || detail.timeline.length > 0) && (
+          <section className="td-panel">
+            <p className="td-eyebrow">왜 뜨나</p>
+            {/* 요약이 비면 AI 요약 블록 전체를 숨긴다 — 빈 배지/자리만 남지 않게. */}
+            {detail.summary && <StreamingSummary text={detail.summary} />}
+            <WhyList detail={detail} />
+            {extraChannels.length > 0 && (
+              <p className="td-why-channels">그 밖의 감지 채널 · {extraChannels.join(", ")}</p>
+            )}
+          </section>
+        )}
 
         {detail.related.length > 0 && (
           <section className="td-panel">
             <h2 className="td-h2">근거 콘텐츠</h2>
-            <div className="td-source-grid">
-              {detail.related.map((item, index) => (
-                <SourceCard
-                  key={`${item.url}-${index}`}
-                  platform={item.platform}
-                  kind={item.kind}
-                  title={item.title}
-                  metric={item.metric}
-                  excerpt={item.excerpt ?? ""}
-                  url={item.url}
-                  glyph={platformGlyph(item.platform)}
-                  thumbClass={platformClass(item.platform)}
-                />
-              ))}
-            </div>
+            <RelatedSources items={detail.related} />
           </section>
         )}
 
@@ -337,20 +292,6 @@ export default async function TrendDetailPage({ params }: { params: Promise<{ sl
                 </span>
               ))}
             </div>
-          </section>
-        )}
-
-        {detail.channels.length > 0 && (
-          <section className="td-panel">
-            <h2 className="td-h2">감지 채널</h2>
-            <ul className="td-channel-list">
-              {detail.channels.map((channel) => (
-                <li key={channel}>
-                  <span className="td-live-dot" aria-hidden="true" />
-                  {channel}
-                </li>
-              ))}
-            </ul>
           </section>
         )}
 

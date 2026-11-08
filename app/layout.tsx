@@ -5,11 +5,10 @@ import Script from "next/script";
 import { getDocList } from "@/lib/docs";
 import { SITE_DESCRIPTION, SITE_NAME, SITE_TITLE, siteUrl } from "@/lib/site";
 import { currentUserCanViewDocs } from "@/server/http/current-user";
-import { getCategories } from "@/server/services/category.service";
-import { getTrends } from "@/server/services/trend.service";
 
 import AppNav from "./app-nav";
 import CommandPalette from "./command-palette";
+import NavHistory from "./nav-history";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -39,6 +38,8 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
+  // 홈 화면 앱의 상태표시줄 색 — 기본(다크) 테마의 --bg와 같다.
+  themeColor: "#0b0e14",
 };
 
 // 첫 페인트 전에 저장된 테마를 적용해 FOUC(테마 깜빡임)를 막는다.
@@ -65,13 +66,8 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  // 문서는 관리자만 본다(#79) — 비관리자에게는 커맨드 팔레트 검색 대상에도, 탭바에도 노출하지 않는다.
-  // 세 요청 모두 독립적이라 병렬로 — admin 판정(DB 조회 1회)을 trends/categories 앞에 줄 세우지 않는다.
-  const [showDocsNav, categoryResult, trendResult] = await Promise.all([
-    currentUserCanViewDocs(),
-    getCategories(),
-    getTrends(),
-  ]);
+  // 문서는 관리자만 본다(#79) — 비관리자에게는 커맨드 팔레트 검색 대상에도, 메뉴에도 노출하지 않는다.
+  const showDocsNav = await currentUserCanViewDocs();
 
   // filePath는 클라이언트로 내보내지 않는다.
   const paletteDocs = showDocsNav
@@ -81,14 +77,6 @@ export default async function RootLayout({
         description,
       }))
     : [];
-
-  const categories = categoryResult.data.map((category) => category.name);
-  const paletteKeywords = trendResult.data.map((row) => ({
-    keyword: row.keyword,
-    slug: row.slug,
-    category: row.category,
-    rank: row.rank,
-  }));
 
   return (
     <html
@@ -106,9 +94,11 @@ export default async function RootLayout({
           strategy="afterInteractive"
         />
         <AppNav showDocsNav={showDocsNav} />
+        <NavHistory />
         {children}
-        {/* getDocList()는 fs를 쓰는 서버 전용이라 여기서 호출해 props로 내려준다. */}
-        <CommandPalette docs={paletteDocs} categories={categories} keywords={paletteKeywords} />
+        {/* getDocList()는 fs를 쓰는 서버 전용이라 여기서 호출해 props로 내려준다.
+            키워드·카테고리는 레이아웃에서 받지 않는다 — 팔레트를 처음 열 때 백엔드 API로 지연 로딩한다(#87). */}
+        <CommandPalette docs={paletteDocs} />
       </body>
     </html>
   );

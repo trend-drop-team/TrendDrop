@@ -8,7 +8,7 @@ const STATS = [0, 1, 2, 3];
 
 export default function Loading() {
   return (
-    <div className="td" aria-busy="true" aria-label="불러오는 중">
+    <div className="td" role="status" aria-busy="true" aria-label="불러오는 중">
       <div className="td-content">
         <div className="td-topbar">
           <span className="sk sk-h2" />
