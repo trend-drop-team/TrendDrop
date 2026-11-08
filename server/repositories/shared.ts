@@ -54,11 +54,14 @@ export function parseReasons(raw: unknown): KeywordReason[] {
  * 필터링하지 않고 "실제로 trend_snapshots가 있는가"로 걸러서, 파이프라인 구성이
  * 바뀌어도 깨지지 않게 한다.
  */
+/** "이 run에 trend_snapshots가 있다" — 원문만 긁는 collect run을 랭킹 화면에서 빼는 조건(아래 recentRuns 주석 참고). */
+export const HAS_SNAPSHOTS = sql`exists (select 1 from ${trendSnapshots} where ${trendSnapshots.runId} = ${collectionRuns.id})`;
+
 export async function recentRuns(limit: number): Promise<RunRow[]> {
   const rows = await getDb()
     .select({ id: collectionRuns.id, at: RUN_AT })
     .from(collectionRuns)
-    .where(sql`exists (select 1 from ${trendSnapshots} where ${trendSnapshots.runId} = ${collectionRuns.id})`)
+    .where(HAS_SNAPSHOTS)
     .orderBy(desc(RUN_AT))
     .limit(limit);
 

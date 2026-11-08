@@ -1,8 +1,8 @@
-import { asc, sql } from "drizzle-orm";
+import { and, asc, sql } from "drizzle-orm";
 
 import { getDb } from "@/db";
 import { categories as categoriesTable, collectionRuns } from "@/db/schema";
-import { RUN_AT, snapshotsForRuns, type RunRow, type SnapshotRow } from "@/server/repositories/shared";
+import { HAS_SNAPSHOTS, RUN_AT, snapshotsForRuns, type RunRow, type SnapshotRow } from "@/server/repositories/shared";
 
 export type CategoryOrderRow = { name: string; sortOrder: number };
 
@@ -25,7 +25,8 @@ export async function dbHeatmapIngredients(windowHours: number): Promise<Heatmap
     await getDb()
       .select({ id: collectionRuns.id, at: RUN_AT })
       .from(collectionRuns)
-      .where(sql`${RUN_AT} >= ${since.toISOString()}`)
+      // 수집 전용 run(collect)까지 열로 잡으면 시각이 두 번씩 찍히고 그 열은 전부 비거나 "권외"가 된다(#125) — 랭킹이 저장된 run만.
+      .where(and(sql`${RUN_AT} >= ${since.toISOString()}`, HAS_SNAPSHOTS))
       .orderBy(asc(RUN_AT))
   ).map((run) => ({ id: run.id, at: new Date(run.at) }));
 
