@@ -12,7 +12,7 @@
   --chart-dot: var(--accent);
 
   --td-page-top: 56px;
-  --td-page-bottom: 128px;
+  --td-page-bottom: 96px;
   --td-section-gap: 44px;
   --td-panel-pad: 30px;
   --td-hero-gap: clamp(48px, 6vw, 76px);
@@ -188,6 +188,28 @@
   font-size: 0.7em;
 }
 
+/* 하락: 같은 pill, 빨강 + ▼ — 예전엔 -58%도 초록 ▲로 나왔다 */
+.td-down {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: var(--down-soft);
+  color: var(--down);
+}
+
+/* 퍼센트가 아닌 값("1회 언급")은 화살표·색 없이 */
+.td-flat {
+  font-size: 1.1rem;
+  color: var(--muted);
+}
+
+.td-down::before {
+  content: "▼";
+  font-size: 0.7em;
+}
+
 .td-stat-label {
   display: block;
   margin-top: 6px;
@@ -316,9 +338,26 @@
 .td-spark-days {
   display: flex;
   justify-content: space-between;
+  gap: 4px;
   margin-top: 10px;
   font-size: 0.72rem;
+  line-height: 1.35;
   color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* "11/7 19:00"처럼 날짜가 붙은 라벨은 좁은 폭에서 날짜/시각 두 줄로 접힌다(#125) */
+.td-spark-days span {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  min-width: 0;
+  text-align: center;
+}
+
+.td-spark-date {
+  font-size: 0.66rem;
+  color: var(--accent);
 }
 
 /* 관련 콘텐츠 */
@@ -450,10 +489,10 @@
 
 /* 반응형 */
 
-@media (max-width: 720px) {
+@container app (max-width: 720px) {
   .td {
     --td-page-top: 24px;
-    --td-page-bottom: 64px;
+    --td-page-bottom: 56px;
     --td-section-gap: 32px;
     --td-panel-pad: 22px;
     --td-hero-gap: 36px;
@@ -764,4 +803,65 @@
 .td-source-link:hover {
   text-decoration: underline;
   text-underline-offset: 3px;
+}
+
+/* --- #81 상세 정리 --- */
+.td-source-thumb {
+  width: 56px;
+  height: 56px;
+  flex: none;
+  overflow: hidden;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--surface-inset);
+}
+
+.td-source-thumb img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.td-source-more {
+  display: block;
+  margin: 18px auto 0;
+  padding: 8px 18px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.84rem;
+  cursor: pointer;
+  transition: border-color 0.2s ease, color 0.2s ease;
+}
+
+.td-source-more:hover {
+  border-color: var(--glow-line);
+  color: var(--accent);
+}
+
+.td-source-more:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.td-why-channels {
+  margin-top: 18px;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+/* 근거가 키워드 반복뿐일 때의 빈 상태 — 내부 소스 id 대신 감지 채널 이름만 한 줄로 */
+.td-why-empty {
+  margin: 14px 0 0;
+  font-size: 0.95rem;
+  line-height: 1.7;
+  color: var(--muted);
+}
+
+.td-why-empty strong {
+  color: var(--text);
+  font-weight: 600;
 }

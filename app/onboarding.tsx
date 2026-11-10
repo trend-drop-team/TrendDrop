@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 export const INTERESTS_KEY = "td-interests";
 export const ONBOARDED_KEY = "td-onboarded";
@@ -97,7 +98,9 @@ export default function Onboarding({ categories }: Props) {
 
   if (!open) return null;
 
-  return (
+  // body로 포털 — 앱 칼럼(.app-frame)은 container query용 레이아웃 격리라, 그 안의 fixed 오버레이는
+  // 화면이 아니라 칼럼 전체 높이를 기준으로 잡혀 모달이 페이지 중간에 뜬다.
+  return createPortal(
     <div className="onb-overlay" onMouseDown={close}>
       <div
         className="onb-dialog"
@@ -147,6 +150,7 @@ export default function Onboarding({ categories }: Props) {
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

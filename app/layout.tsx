@@ -1,12 +1,17 @@
 import type { Metadata, Viewport } from "next";
+import { Noto_Sans_KR, Space_Grotesk } from "next/font/google";
+import Script from "next/script";
 
+import { ADSENSE_CLIENT, adsEnabledOnServer, adsPreviewOnServer } from "@/lib/adsense";
 import { getDocList } from "@/lib/docs";
 import { SITE_DESCRIPTION, SITE_NAME, SITE_TITLE, siteUrl } from "@/lib/site";
-import { getCategories } from "@/server/services/category.service";
-import { getTrends } from "@/server/services/trend.service";
+import { currentUserCanViewDocs } from "@/server/http/current-user";
 
 import AppNav from "./app-nav";
+import StageAside from "./stage-aside";
 import CommandPalette from "./command-palette";
+import InstallPrompt from "./install-prompt";
+import NavHistory from "./nav-history";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -36,44 +41,87 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
+  // 홈 화면 앱의 상태표시줄 색 — 기본(다크) 테마의 --bg와 같다.
+  themeColor: "#0b0e14",
 };
 
 // 첫 페인트 전에 저장된 테마를 적용해 FOUC(테마 깜빡임)를 막는다.
 const themeScript = `try{var t=localStorage.getItem('td-theme');if(t==='warm'||t==='dark')document.documentElement.dataset.theme=t;}catch(e){}`;
+
+// 본문. Noto Sans KR은 용량이 커서 실제 쓰이는 굵기만 받는다(기본 400 + globals.css의 600/700/800/900).
+const notoSansKr = Noto_Sans_KR({
+  subsets: ["latin"],
+  weight: ["400", "600", "700", "800", "900"],
+  display: "swap",
+  variable: "--font-noto-sans-kr",
+});
+
+// 제목·숫자. 사이트 전체에서 bold(700)로만 쓰인다.
+const spaceGrotesk = Space_Grotesk({
+  subsets: ["latin"],
+  weight: ["700"],
+  display: "swap",
+  variable: "--font-space-grotesk",
+});
 
 export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // 문서는 관리자만 본다(#79) — 비관리자에게는 커맨드 팔레트 검색 대상에도, 메뉴에도 노출하지 않는다.
+  const showDocsNav = await currentUserCanViewDocs();
+
   // filePath는 클라이언트로 내보내지 않는다.
-  const paletteDocs = getDocList().map(({ slug, title, description }) => ({
-    slug,
-    title,
-    description,
-  }));
+  const paletteDocs = showDocsNav
+    ? getDocList().map(({ slug, title, description }) => ({
+        slug,
+        title,
+        description,
+      }))
+    : [];
 
-  // 커맨드 팔레트는 모든 화면에 떠 있으므로 검색 대상도 여기서 한 번만 받아 내려준다.
-  const [categoryResult, trendResult] = await Promise.all([getCategories(), getTrends()]);
-
-  const categories = categoryResult.data.map((category) => category.name);
-  const paletteKeywords = trendResult.data.map((row) => ({
-    keyword: row.keyword,
-    slug: row.slug,
-    category: row.category,
-    rank: row.rank,
-  }));
+  // 광고: 운영에서만 "on"(스크립트 로드), 개발 미리보기는 "preview"(자리표시자만), 그 외엔 속성 없음 → 슬롯이 공간을 잡지 않는다.
+  const adsMode = adsEnabledOnServer() ? "on" : adsPreviewOnServer() ? "preview" : undefined;
 
   return (
-    <html lang="ko" data-theme="dark" suppressHydrationWarning>
+    <html
+      lang="ko"
+      data-theme="dark"
+      suppressHydrationWarning
+      className={`${notoSansKr.variable} ${spaceGrotesk.variable}`}
+    >
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>
-      <body>
-        <AppNav />
-        {children}
-        {/* getDocList()는 fs를 쓰는 서버 전용이라 여기서 호출해 props로 내려준다. */}
-        <CommandPalette docs={paletteDocs} categories={categories} keywords={paletteKeywords} />
+      <body data-ads={adsMode}>
+        {adsMode === "on" && (
+          <Script
+            async
+            src={`https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${ADSENSE_CLIENT}`}
+            crossOrigin="anonymous"
+            strategy="afterInteractive"
+          />
+        )}
+        <Script
+          src="https://t1.kakaocdn.net/kakao_js_sdk/2.8.2/kakao.min.js"
+          strategy="afterInteractive"
+        />
+        {/* 데스크톱(1024px+): 왼쪽 브랜드 패널 + 오른쪽 앱 칼럼. 모바일·태블릿: 앱 칼럼만(전체 폭). */}
+        <div className="stage">
+          <aside className="stage-aside" aria-label="TrendDrop 소개">
+            <StageAside />
+          </aside>
+          <div className="app-frame">
+            <AppNav showDocsNav={showDocsNav} />
+            <NavHistory />
+            {children}
+          </div>
+        </div>
+        {/* getDocList()는 fs를 쓰는 서버 전용이라 여기서 호출해 props로 내려준다.
+            키워드·카테고리는 레이아웃에서 받지 않는다 — 팔레트를 처음 열 때 백엔드 API로 지연 로딩한다(#87). */}
+        <CommandPalette docs={paletteDocs} />
+        <InstallPrompt />
       </body>
     </html>
   );

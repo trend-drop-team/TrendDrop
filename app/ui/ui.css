@@ -1,0 +1,190 @@
+/*
+ * TrendDrop UI 키트(#123) — globals.css 토큰(--surface, --accent …) 위의 얇은 컴포넌트 층.
+ * 규칙: 색·반경은 토큰만, 한글은 자간 0·어절 줄바꿈, 터치 대상 최소 44px(작은 칩은 36px),
+ *       세로 여백은 넉넉하게. 미리보기: /ui-kit (개발 환경 전용)
+ */
+
+.ui-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 18px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface-soft);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.92rem;
+  font-weight: 600;
+  letter-spacing: 0;
+  word-break: keep-all;
+  text-decoration: none;
+  cursor: pointer;
+  transition: border-color 0.2s ease, background 0.2s ease, transform 0.12s ease;
+}
+
+.ui-btn:hover {
+  border-color: var(--line-strong);
+}
+
+.ui-btn:active {
+  transform: scale(0.98);
+}
+
+.ui-btn:focus-visible,
+.ui-chip:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.ui-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.ui-btn-primary {
+  border-color: transparent;
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.ui-btn-ghost {
+  border-color: transparent;
+  background: transparent;
+  color: var(--muted);
+}
+
+.ui-btn-sm {
+  min-height: 36px;
+  padding: 0 14px;
+  font-size: 0.84rem;
+}
+
+.ui-chip {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  min-height: 36px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface-soft);
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.88rem;
+  letter-spacing: 0;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.ui-chip[aria-pressed="true"] {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.ui-card {
+  display: grid;
+  gap: 16px;
+  padding: 24px 20px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  min-width: 0;
+}
+
+.ui-card-flat {
+  background: var(--surface-soft);
+}
+
+.ui-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-family: var(--font-num);
+  font-variant-numeric: tabular-nums;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0;
+  white-space: nowrap;
+  background: var(--surface-inset);
+  color: var(--muted);
+}
+
+.ui-badge-up {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.ui-badge-down {
+  background: var(--down-soft);
+  color: var(--down);
+}
+
+.ui-badge-new {
+  background: var(--accent-2-soft);
+  color: var(--accent-2);
+}
+
+.ui-stat {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.ui-stat-value {
+  font-family: var(--font-num);
+  font-variant-numeric: tabular-nums;
+  font-size: 1.6rem;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.ui-stat-label {
+  font-size: 0.78rem;
+  letter-spacing: 0;
+  color: var(--muted);
+}
+
+.ui-section-title {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+}
+
+.ui-section-eyebrow {
+  margin: 0;
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0;
+  color: var(--accent);
+}
+
+.ui-section-heading {
+  margin: 0;
+  font-size: 1.15rem;
+  line-height: 1.35;
+  text-wrap: balance;
+}
+
+.ui-section-sub {
+  margin: 0;
+  font-size: 0.9rem;
+  line-height: 1.6;
+  color: var(--muted);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ui-btn {
+    transition: none;
+  }
+
+  .ui-btn:active {
+    transform: none;
+  }
+}

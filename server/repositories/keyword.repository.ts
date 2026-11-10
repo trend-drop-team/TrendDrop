@@ -9,7 +9,7 @@ import {
   trendContents,
   trendSnapshots,
 } from "@/db/schema";
-import { RUN_AT, SPARK_WINDOW } from "@/server/repositories/shared";
+import { HAS_SNAPSHOTS, RUN_AT, SPARK_WINDOW } from "@/server/repositories/shared";
 
 export type KeywordRow = {
   id: number;
@@ -52,7 +52,8 @@ export async function dbHistoryIngredients(
   const runs = await db
     .select({ id: collectionRuns.id })
     .from(collectionRuns)
-    .where(sql`${RUN_AT} >= ${since.toISOString()}`)
+    // 수집 전용 run(collect)까지 열로 잡으면 시각이 두 번씩 찍히고 그 열은 전부 비거나 "권외"가 된다(#125) — 랭킹이 저장된 run만.
+    .where(and(sql`${RUN_AT} >= ${since.toISOString()}`, HAS_SNAPSHOTS))
     .orderBy(asc(RUN_AT));
 
   if (runs.length === 0) return { runs: [], rows: [] };

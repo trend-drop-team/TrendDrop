@@ -1,0 +1,16 @@
+/* /ui-kit 미리보기 전용 배치 */
+.uikit {
+  gap: 28px;
+}
+
+.uikit-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.uikit-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}

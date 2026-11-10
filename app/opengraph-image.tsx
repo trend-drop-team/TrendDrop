@@ -21,7 +21,8 @@ export default async function Image() {
   try {
     const result = await fetchApi<ApiResult<TrendRow[]>>(`/api/trends?period=daily&limit=${TOP_N}`);
     rows = result.data.slice(0, TOP_N);
-  } catch {
+  } catch (error) {
+    console.error("[opengraph-image] 트렌드 데이터를 불러오지 못했습니다.", error);
     // 백엔드가 죽어도 링크 미리보기는 떠야 한다 — 순위 없이 브랜드 카드만 그린다.
   }
 

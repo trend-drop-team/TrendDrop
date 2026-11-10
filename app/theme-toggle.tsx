@@ -27,15 +27,26 @@ export default function ThemeToggle() {
     <button type="button" className="theme-toggle" onClick={toggle}>
       <span className="theme-toggle-opt theme-toggle-to-warm">
         <span className="theme-toggle-glyph" aria-hidden="true">
-          ☀
+          <svg viewBox="0 0 24 24" focusable="false">
+            <circle cx="12" cy="12" r="4.2" fill="currentColor" />
+            <path
+              d="M12 2.5v2.3M12 19.2v2.3M2.5 12h2.3M19.2 12h2.3M5.3 5.3l1.6 1.6M17.1 17.1l1.6 1.6M5.3 18.7l1.6-1.6M17.1 6.9l1.6-1.6"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+            />
+          </svg>
         </span>
-        웜톤<span className="sr-only"> 테마로 전환</span>
+        <span className="theme-toggle-label">웜톤</span><span className="sr-only"> 테마로 전환</span>
       </span>
       <span className="theme-toggle-opt theme-toggle-to-dark">
         <span className="theme-toggle-glyph" aria-hidden="true">
-          ◐
+          <svg viewBox="0 0 24 24" focusable="false">
+            <path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5Z" fill="currentColor" />
+          </svg>
         </span>
-        다크<span className="sr-only"> 테마로 전환</span>
+        <span className="theme-toggle-label">다크</span><span className="sr-only"> 테마로 전환</span>
       </span>
     </button>
   );

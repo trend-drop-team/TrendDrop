@@ -41,6 +41,7 @@ if (rows.length === 0) { rows = mockCategories(); source = "mock"; }  // 데이�
 - **붙임**: 테이블이 실제로 비어 있을 수 있는 게 알려진 정상 상태(예: 파이프라인이 아직 안 채움, 방금 띄운 DB)일 때만. `meta.source`를 `"mock"`으로 정직하게 바꾼다.
 - **안 붙임**: "없음"이 요청에 고유한 정답인 경우(예: `getKeywordDetail`처럼 존재하지 않는 슬러그는 `NotFoundError`(404)로 표현 — mock 데모 콘텐츠로 가리면 오히려 혼란스럽다. `getWatchlist`처럼 로그인한 사용자가 저장한 게 없다는 정상 상태를 mock 예시 항목으로 채우면 거짓 정보가 된다).
 - 새 도메인을 추가할 때 이 둘 중 뭐가 맞는지 먼저 판단할 것.
+- **mock 대체는 개발에서만(#87).** 서비스 맨 앞에서 `requireDbUnlessMockAllowed()`(운영인데 DB 미설정이면 throw → 500), mock으로 메우는 분기는 `allowMockFallback()`로 감싼다(`lib/env.ts`). 운영에서 DB가 비어 있으면 빈 결과가 나가고 화면은 빈 상태 안내를 그린다. 화면은 `meta.source === "mock"`이면 `SampleDataBadge`(`app/sample-data-badge.tsx`)를 띄운다.
 - 실제 DB Repository와 Mock Repository는 같은 도메인 타입(예: `CategoryRow[]`, `KeywordDetail`)을 반환하게 맞춘다. Service 쪽에 `if (source === "db")`로 응답 모양 자체가 갈라지는 분기가 생기면 잘못된 신호다.
 
 ### 3. 응답·에러 계약
@@ -62,7 +63,18 @@ if (rows.length === 0) { rows = mockCategories(); source = "mock"; }  // 데이�
 - **`collection_runs`에 스냅샷 없는 run이 섞여 있을 수 있다.** 수집 파이프라인은 원문만 모으는 run(`trend_snapshots` 없음)과 랭킹까지 계산해 저장하는 run으로 나뉜다. "최근 run"이 필요한 쿼리는 pipeline 이름으로 거르지 말고 `exists(select 1 from trend_snapshots where run_id = ...)`처럼 실제 데이터 존재 여부로 거른다(`recentRuns()`가 이렇게 함) — pipeline 이름이 바뀌어도 안 깨진다.
 
 ## 인증
-`getUserId()`(x-user-id 헤더/td-user 쿠키를 신뢰하는 임시 경계, `TODO(auth)`)는 `server/http/auth.ts`에 있다. 실제 세션 발급이 붙기 전까지 이 함수를 우회하거나 다른 곳에 별도 인증 로직을 만들지 않는다.
+`getUserId()`(`server/http/auth.ts`)는 서명된 `td-session` 쿠키만 신뢰한다(#53 — 클라이언트가 보내는 `x-user-id` 헤더를 그대로 믿던 경계는 제거됨). 이 함수를 우회하거나 다른 곳에 별도 인증 로직을 만들지 않는다. 세션은 `backend/server.ts`의 OAuth 콜백에서 `createSession()`으로 발급된다.
+
+Route Handler가 아니라 RootLayout·Server Component(`app/docs/**` 등)에서 로그인 사용자를 알아야 하면 `getUserId(request)` 대신 `server/http/current-user.ts`의 `getCurrentUserId()`(next/headers 쿠키 기반)를 쓴다.
+
+세션 폐기(#94) 이후로는 Route Handler도 `getUserId(request)`를 직접 쓰지 않는다 — `server/http/active-user.ts`의 `getActiveUserId(request)`(서명·만료 검증 + 세션 폐기 확인)를 쓴다. `getUserId`/`verifySession`은 그 내부에서만 쓰이는 저수준 함수로 남아 있다(자체 테스트 외에는 직접 호출하는 곳이 없다).
+
+## 권한(role)
+`users.role`(기본값 `'user'`)이 관리자 구분이다(#79). 승격/강등 UI는 없다 — 운영자가 DB에서 직접 `UPDATE users SET role = 'admin' ...`로 바꾼다. 역할 판정은 `server/services/user.service.ts`의 `isAdminRole()`/`isAdmin()`만 쓴다(화이트리스트 비교 — `'admin'`이 아니면 전부 거부, role 조회 실패도 비관리자로 접는다 — 모호하면 거부). `canViewDocs(userId)`(같은 파일, null-safe)가 "로그인 + 관리자" 판정의 단일 소스다.
+
+Route Handler는 `getActiveUserId(request)` + `isAdmin()`을 직접 조합해 401/403을 가른다(`app/api/docs/route.ts`). RootLayout·Server Component는 `server/http/current-user.ts`의 `currentUserCanViewDocs()`(= `getCurrentUserId()` + `canViewDocs()` 조합, next/headers 쿠키 기반) 하나만 부른다 — `app/layout.tsx`·`app/docs/page.tsx`·`app/docs/[slug]/page.tsx` 세 곳이 각자 조립하지 않고 이 함수 하나를 공유한다. 새 역할이 생기거나 판정 조건이 바뀌어도 `isAdminRole`/`isAdmin`/`canViewDocs` 이 한 곳만 고치면 세 호출부가 전부 같이 바뀐다.
+
+role 조회(`dbGetUserRole`)는 `cache()`(`react`)로 요청 단위 메모이즈돼 있다 — RootLayout과 페이지가 한 렌더에서 각각 불러도 쿼리는 한 번만 나간다(`category.repository.ts`의 `dbCategories`와 같은 이유).
 
 ## 검증
 - 여러 파일을 고칠 땐 단계마다 `npx tsc --noEmit`으로 깨진 import부터 잡는다.
