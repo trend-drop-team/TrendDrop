@@ -1,13 +1,7 @@
 {
   "functions": {
     "api/**/*.ts": {
-      "includeFiles": [
-        "backend/**",
-        "server/**",
-        "db/**",
-        "lib/**",
-        "types/**"
-      ]
+      "includeFiles": "**/*"
     }
   }
 }
