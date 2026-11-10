@@ -13,7 +13,7 @@ import { createSession, getUserId, SESSION_MAX_AGE } from "@/server/http/auth";
 import { getDb } from "@/db";
 import { users } from "@/db/schema";
 
-const app = express();
+export const app = express();
 // Render and other PaaS providers inject PORT; BACKEND_PORT is kept for local development.
 const port = Number(process.env.PORT ?? process.env.BACKEND_PORT ?? 4000);
 
@@ -216,4 +216,10 @@ app.use((error: unknown, request: Request, response: Response, _next: NextFuncti
   response.status(500).json({ error: "Internal server error" });
 });
 
-app.listen(port, () => console.log(`TrendDrop API listening on http://localhost:${port}`));
+// Vercel imports this module as a Function handler; only the local entrypoint
+// should open a long-lived HTTP listener.
+if (!process.env.VERCEL && process.env.NODE_ENV !== "test") {
+  app.listen(port, () => console.log(`TrendDrop API listening on http://localhost:${port}`));
+}
+
+export default app;
