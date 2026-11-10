@@ -1,4 +1,4 @@
-import { realtimeTrends } from "./data";
+import { realtimeTrends } from "./data.ts";
 
 /**
  * 시계열 스냅샷 레이어.

@@ -4,10 +4,10 @@
  */
 import { NextResponse } from "next/server";
 
-import { NotFoundError } from "./not-found";
+import { NotFoundError } from "./not-found.ts";
 
 // NotFoundError는 next/server에 묶이지 않도록 별도 모듈에 있다(Express 백엔드가 같이 쓴다).
-export { NotFoundError } from "./not-found";
+export { NotFoundError } from "./not-found.ts";
 
 export function errorResponse(message: string, status: number, detail?: string) {
   return NextResponse.json(detail ? { error: message, detail } : { error: message }, { status });

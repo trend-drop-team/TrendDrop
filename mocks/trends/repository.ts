@@ -5,20 +5,20 @@
  * `timeline.ts`)에서 스펙 형태로 조립한다.
  * 12개 스냅샷을 12개 run으로 취급하므로 runId ↔ snapshot.id가 1:1 대응한다.
  */
-import { slugify } from "../../lib/utils/slug";
-import type { CategoryRow } from "../../types/api/category";
-import type { HeatmapPayload } from "../../types/api/heatmap";
-import type { HistoryPoint, KeywordDetail } from "../../types/api/keyword";
-import type { TickerRow, TimelineSnapshot, TrendRow } from "../../types/api/trend";
-import type { WatchlistRow } from "../../types/api/watchlist";
+import { slugify } from "../../lib/utils/slug.ts";
+import type { CategoryRow } from "../../types/api/category.ts";
+import type { HeatmapPayload } from "../../types/api/heatmap.ts";
+import type { HistoryPoint, KeywordDetail } from "../../types/api/keyword.ts";
+import type { TickerRow, TimelineSnapshot, TrendRow } from "../../types/api/trend.ts";
+import type { WatchlistRow } from "../../types/api/watchlist.ts";
 
-import { realtimeTrends, dailyTrends, watchItems } from "./data";
+import { realtimeTrends, dailyTrends, watchItems } from "./data.ts";
 import {
   getCategoryHeat,
   getTickerItems,
   snapshots as mockSnapshots,
   type RankedItem,
-} from "./timeline";
+} from "./timeline.ts";
 
 const detailByKeyword = new Map(realtimeTrends.map((trend) => [trend.keyword, trend]));
 

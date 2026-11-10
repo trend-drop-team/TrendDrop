@@ -14,7 +14,7 @@ function signPayload(payload: string) {
 // sessionSecret()은 호출 시점에 process.env를 읽으므로, 위 설정이 먼저 끝난 뒤
 // 동기적으로 가져온다.
 const require = createRequire(import.meta.url);
-const { createSession, getUserId, decodeSession } = require("./auth") as typeof import("./auth");
+const { createSession, getUserId, decodeSession } = require("./auth.ts") as typeof import("./auth.ts");
 
 function requestWith(headers: Record<string, string>) {
   return { headers } as unknown as Parameters<typeof getUserId>[0];

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { resolveOAuthUser, type ResolveOAuthUserInput } from "./oauth-account.service";
+import { resolveOAuthUser, type ResolveOAuthUserInput } from "./oauth-account.service.ts";
 
 type FakeRow = { id: number; email: string; name: string | null; provider: string | null; providerId: string | null };
 

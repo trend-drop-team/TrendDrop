@@ -1,4 +1,4 @@
-import type { RunColumn } from "./trend";
+import type { RunColumn } from "./trend.ts";
 
 /** 3.5 GET /api/explore/heatmap */
 export type HeatmapPayload = {

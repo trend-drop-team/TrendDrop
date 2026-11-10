@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, test } from "node:test";
 
-import { getCategories } from "./category.service";
-import { getHeatmap } from "./heatmap.service";
-import { getTrends } from "./trend.service";
+import { getCategories } from "./category.service.ts";
+import { getHeatmap } from "./heatmap.service.ts";
+import { getTrends } from "./trend.service.ts";
 
 // #87 — DB가 없을 때 mock 대체는 개발에서만. 운영(production)에서는 mock을 내보내지 않는다.
 // 서비스는 호출 시점에 process.env를 읽으므로 테스트마다 바꿔 끼운다.

@@ -1,8 +1,8 @@
 import { and, eq } from "drizzle-orm";
 import { cache } from "react";
 
-import { getDb } from "../../db";
-import { users } from "../../db/schema";
+import { getDb } from "../../db/index.ts";
+import { users } from "../../db/schema.ts";
 
 export type OAuthUserRow = { id: number; name: string | null };
 

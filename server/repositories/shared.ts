@@ -4,9 +4,9 @@
  */
 import { desc, eq, inArray, sql } from "drizzle-orm";
 
-import { getDb } from "../../db";
-import { categories as categoriesTable, collectionRuns, keywords as keywordsTable, trendSnapshots } from "../../db/schema";
-import type { KeywordReason } from "../../types/api/keyword";
+import { getDb } from "../../db/index.ts";
+import { categories as categoriesTable, collectionRuns, keywords as keywordsTable, trendSnapshots } from "../../db/schema.ts";
+import type { KeywordReason } from "../../types/api/keyword.ts";
 
 /** run의 기준 시각 — 수집 창의 최신 버킷이 있으면 그것을, 없으면 프로세스 시작 시각을 쓴다. */
 export const RUN_AT = sql<Date>`coalesce(${collectionRuns.bucketAt}, ${collectionRuns.startedAt})`;

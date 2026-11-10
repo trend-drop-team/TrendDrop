@@ -1,8 +1,8 @@
 import { and, desc, sql } from "drizzle-orm";
 import { cache } from "react";
 
-import { getDb } from "../../db";
-import { collectionRuns } from "../../db/schema";
+import { getDb } from "../../db/index.ts";
+import { collectionRuns } from "../../db/schema.ts";
 import {
   HAS_SNAPSHOTS,
   recentRuns,
@@ -10,7 +10,7 @@ import {
   snapshotsForRuns,
   type RunRow,
   type SnapshotRow,
-} from "./shared";
+} from "./shared.ts";
 
 export type TrendIngredients = {
   runs: RunRow[];

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { isIssuedBeforeRevocation, isSessionRevoked } from "./session.service";
+import { isIssuedBeforeRevocation, isSessionRevoked } from "./session.service.ts";
 
 test("발급시각이 폐기 기준시각보다 이르면 폐기된 것으로 본다 (#94)", () => {
   const minIat = new Date("2026-01-01T00:00:00Z");

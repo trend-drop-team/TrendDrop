@@ -1,11 +1,11 @@
-import { isDbConfigured } from "../../db";
-import { allowMockFallback, requireDbUnlessMockAllowed } from "../../lib/env";
-import { clockLabel, nowIso, relativeTime } from "../../lib/utils/date";
-import { mockHeatmap } from "../../mocks/trends/repository";
-import { dbHeatmapIngredients, type HeatmapIngredients } from "../repositories/heatmap.repository";
-import { byRank } from "../repositories/shared";
-import type { ApiResult } from "../../types/api/common";
-import type { HeatmapPayload } from "../../types/api/heatmap";
+import { isDbConfigured } from "../../db/index.ts";
+import { allowMockFallback, requireDbUnlessMockAllowed } from "../../lib/env.ts";
+import { clockLabel, nowIso, relativeTime } from "../../lib/utils/date.ts";
+import { mockHeatmap } from "../../mocks/trends/repository.ts";
+import { dbHeatmapIngredients, type HeatmapIngredients } from "../repositories/heatmap.repository.ts";
+import { byRank } from "../repositories/shared.ts";
+import type { ApiResult } from "../../types/api/common.ts";
+import type { HeatmapPayload } from "../../types/api/heatmap.ts";
 
 /**
  * 시점별로 "상위권일수록 큰 가중치"를 합산한 뒤 그 시점 최댓값 기준 0~100으로 정규화한다.

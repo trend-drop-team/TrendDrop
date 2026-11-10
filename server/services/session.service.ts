@@ -1,5 +1,5 @@
-import { isDbConfigured } from "../../db";
-import { dbGetSessionTokenMinIat } from "../repositories/user.repository";
+import { isDbConfigured } from "../../db/index.ts";
+import { dbGetSessionTokenMinIat } from "../repositories/user.repository.ts";
 
 /** 토큰 발급시각이 DB의 폐기 기준시각보다 이르면 폐기된 세션이다(#94).
  * 순수 비교만 담당 — DB 조회 실패/미설정 시의 fail 방향은 isSessionRevoked가 결정한다. */

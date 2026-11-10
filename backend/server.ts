@@ -3,20 +3,20 @@ import rateLimit from "express-rate-limit";
 import { randomBytes } from "node:crypto";
 import express, { type NextFunction, type Request, type Response } from "express";
 
-import { isAllowedOrigin } from "../lib/allowed-origins";
-import { MAX_KEYWORD_SLUG_LENGTH } from "../lib/watchlist-constraints";
-import { getCategories } from "../server/services/category.service";
-import { getHeatmap } from "../server/services/heatmap.service";
-import { getKeywordDetail, getKeywordHistory } from "../server/services/keyword.service";
-import { resolveOAuthUser } from "../server/services/oauth-account.service";
-import { dbGetUserById } from "../server/repositories/user.repository";
-import { getTimeline, getTrends } from "../server/services/trend.service";
-import { addWatchlistItem, getWatchlist, removeWatchlistItem } from "../server/services/watchlist.service";
-import { NotFoundError } from "../server/http/not-found";
-import { parseLimit, parsePeriod, parseRunId, parseWindowHours } from "../server/http/query";
-import { getActiveUserId } from "../server/http/active-user";
-import { createSession, SESSION_MAX_AGE } from "../server/http/auth";
-import { isDbConfigured } from "../db";
+import { isAllowedOrigin } from "../lib/allowed-origins.ts";
+import { MAX_KEYWORD_SLUG_LENGTH } from "../lib/watchlist-constraints.ts";
+import { getCategories } from "../server/services/category.service.ts";
+import { getHeatmap } from "../server/services/heatmap.service.ts";
+import { getKeywordDetail, getKeywordHistory } from "../server/services/keyword.service.ts";
+import { resolveOAuthUser } from "../server/services/oauth-account.service.ts";
+import { dbGetUserById } from "../server/repositories/user.repository.ts";
+import { getTimeline, getTrends } from "../server/services/trend.service.ts";
+import { addWatchlistItem, getWatchlist, removeWatchlistItem } from "../server/services/watchlist.service.ts";
+import { NotFoundError } from "../server/http/not-found.ts";
+import { parseLimit, parsePeriod, parseRunId, parseWindowHours } from "../server/http/query.ts";
+import { getActiveUserId } from "../server/http/active-user.ts";
+import { createSession, SESSION_MAX_AGE } from "../server/http/auth.ts";
+import { isDbConfigured } from "../db/index.ts";
 
 export const app = express();
 // Render and other PaaS providers inject PORT; BACKEND_PORT is kept for local development.

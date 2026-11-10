@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { canViewDocs, isAdminRole } from "./user.service";
+import { canViewDocs, isAdminRole } from "./user.service.ts";
 
 test("role이 admin이면 통과시킨다", () => {
   assert.equal(isAdminRole("admin"), true);

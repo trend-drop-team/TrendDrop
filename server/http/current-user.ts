@@ -1,8 +1,8 @@
 import { cookies } from "next/headers";
 
-import { decodeSession } from "./auth";
-import { isSessionRevoked } from "../services/session.service";
-import { canViewDocs } from "../services/user.service";
+import { decodeSession } from "./auth.ts";
+import { isSessionRevoked } from "../services/session.service.ts";
+import { canViewDocs } from "../services/user.service.ts";
 
 /**
  * getUserId()의 Server Component 버전. Route Handler는 Request를 직접 받지만

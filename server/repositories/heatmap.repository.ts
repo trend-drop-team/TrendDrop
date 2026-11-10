@@ -1,8 +1,8 @@
 import { and, asc, sql } from "drizzle-orm";
 
-import { getDb } from "../../db";
-import { categories as categoriesTable, collectionRuns } from "../../db/schema";
-import { HAS_SNAPSHOTS, RUN_AT, snapshotsForRuns, type RunRow, type SnapshotRow } from "./shared";
+import { getDb } from "../../db/index.ts";
+import { categories as categoriesTable, collectionRuns } from "../../db/schema.ts";
+import { HAS_SNAPSHOTS, RUN_AT, snapshotsForRuns, type RunRow, type SnapshotRow } from "./shared.ts";
 
 export type CategoryOrderRow = { name: string; sortOrder: number };
 

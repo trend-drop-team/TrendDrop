@@ -1,16 +1,16 @@
 import { and, desc, eq, inArray } from "drizzle-orm";
 
-import { getDb } from "../../db";
+import { getDb } from "../../db/index.ts";
 import {
   categories as categoriesTable,
   collectionRuns,
   keywords as keywordsTable,
   trendSnapshots,
   watchlistItems,
-} from "../../db/schema";
-import { NotFoundError } from "../http/not-found";
-import { HAS_SNAPSHOTS, RUN_AT } from "./shared";
-import type { WatchlistRow } from "../../types/api/watchlist";
+} from "../../db/schema.ts";
+import { NotFoundError } from "../http/not-found.ts";
+import { HAS_SNAPSHOTS, RUN_AT } from "./shared.ts";
+import type { WatchlistRow } from "../../types/api/watchlist.ts";
 
 export async function dbWatchlist(userId: number): Promise<WatchlistRow[]> {
   const db = getDb();

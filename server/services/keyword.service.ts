@@ -1,18 +1,18 @@
-import { isDbConfigured } from "../../db";
-import { requireDbUnlessMockAllowed } from "../../lib/env";
-import { axisLabels, kstHourKey, nowIso, relativeTime } from "../../lib/utils/date";
-import { mockHistory, mockKeywordDetail } from "../../mocks/trends/repository";
-import { NotFoundError } from "../http/not-found";
+import { isDbConfigured } from "../../db/index.ts";
+import { requireDbUnlessMockAllowed } from "../../lib/env.ts";
+import { axisLabels, kstHourKey, nowIso, relativeTime } from "../../lib/utils/date.ts";
+import { mockHistory, mockKeywordDetail } from "../../mocks/trends/repository.ts";
+import { NotFoundError } from "../http/not-found.ts";
 import {
   dbFindKeywordBySlug,
   dbHistoryIngredients,
   dbKeywordContents,
   dbKeywordRelatedTerms,
   dbKeywordSnapshotHistory,
-} from "../repositories/keyword.repository";
-import { parseReasons } from "../repositories/shared";
-import type { ApiResult } from "../../types/api/common";
-import type { HistoryPoint, KeywordDetail } from "../../types/api/keyword";
+} from "../repositories/keyword.repository.ts";
+import { parseReasons } from "../repositories/shared.ts";
+import type { ApiResult } from "../../types/api/common.ts";
+import type { HistoryPoint, KeywordDetail } from "../../types/api/keyword.ts";
 
 /** 3.3 GET /api/keywords/:slug — 없는 slug면 NotFoundError(404). */
 export async function getKeywordDetail(slug: string): Promise<ApiResult<KeywordDetail>> {

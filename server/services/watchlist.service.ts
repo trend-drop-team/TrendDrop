@@ -1,13 +1,13 @@
-import { isDbConfigured } from "../../db";
-import { nowIso } from "../../lib/utils/date";
-import { mockWatchlist } from "../../mocks/trends/repository";
+import { isDbConfigured } from "../../db/index.ts";
+import { nowIso } from "../../lib/utils/date.ts";
+import { mockWatchlist } from "../../mocks/trends/repository.ts";
 import {
   dbAddWatchlistItem,
   dbRemoveWatchlistItem,
   dbWatchlist,
-} from "../repositories/watchlist.repository";
-import type { ApiResult } from "../../types/api/common";
-import type { WatchlistRow } from "../../types/api/watchlist";
+} from "../repositories/watchlist.repository.ts";
+import type { ApiResult } from "../../types/api/common.ts";
+import type { WatchlistRow } from "../../types/api/watchlist.ts";
 
 /**
  * 3.6 워치리스트 — 모두 로그인한 user_id가 필요하다.
