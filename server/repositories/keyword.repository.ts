@@ -1,6 +1,6 @@
 import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 
-import { getDb } from "@/db";
+import { getDb } from "../../db";
 import {
   categories as categoriesTable,
   collectionRuns,
@@ -8,8 +8,8 @@ import {
   keywords as keywordsTable,
   trendContents,
   trendSnapshots,
-} from "@/db/schema";
-import { HAS_SNAPSHOTS, RUN_AT, SPARK_WINDOW } from "@/server/repositories/shared";
+} from "../../db/schema";
+import { HAS_SNAPSHOTS, RUN_AT, SPARK_WINDOW } from "./shared";
 
 export type KeywordRow = {
   id: number;

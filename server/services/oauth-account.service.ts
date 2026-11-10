@@ -5,7 +5,7 @@ import {
   dbLinkProviderToUser,
   dbUpdateUserName,
   type OAuthUserRow,
-} from "@/server/repositories/user.repository";
+} from "../repositories/user.repository";
 
 export type ResolveOAuthUserInput = {
   provider: string;

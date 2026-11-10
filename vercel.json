@@ -1,0 +1,7 @@
+{
+  "functions": {
+    "api/**/*.ts": {
+      "includeFiles": "backend/server.ts"
+    }
+  }
+}

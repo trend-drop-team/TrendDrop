@@ -1,7 +1,7 @@
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 
-import { getDatabaseUrl, hasDatabaseUrl } from "@/lib/env";
+import { getDatabaseUrl, hasDatabaseUrl } from "../lib/env";
 
 let dbInstance: ReturnType<typeof drizzle> | null = null;
 
