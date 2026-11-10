@@ -1,5 +1,5 @@
 import express from "express";
-import app from "../backend/server";
+import app from "../backend/server.ts";
 
 // Keep the framework import explicit for Vercel's Express entrypoint detection.
 void express;
