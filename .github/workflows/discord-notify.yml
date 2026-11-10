@@ -6,7 +6,7 @@ on:
   issues:
     types: [opened, closed, reopened, labeled]
   workflow_run:
-    workflows: ["CI", "collect (hourly)", "rank (1h)"]
+    workflows: ["CI", "collect (hourly)", "rank (2h)"]
     types: [completed]
 
 jobs:
@@ -74,6 +74,9 @@ jobs:
 
           message=$(printf '%s %s: %s\n작성자: %s\n상태: %s\n링크: %s' \
             "$emoji" "$EVENT_ACTION" "$title" "$author" "$status" "$url")
+
+          # Discord content 필드의 최대 길이(2,000자)를 넘지 않도록 제한한다.
+          message=$(printf '%s' "$message" | cut -c1-2000)
 
           payload=$(jq -n --arg content "$message" '{content: $content}')
           curl --fail-with-body --silent --show-error \
