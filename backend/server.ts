@@ -224,6 +224,7 @@ app.post("/api/auth/logout", (request, response) => {
 });
 
 app.get("/health", (_request, response) => response.json({ ok: true }));
+app.get("/api/health", (_request, response) => response.json({ ok: true }));
 
 app.get("/api/categories", async (_request, response, next) => {
   try { response.json(await getCategories()); } catch (error) { next(error); }
