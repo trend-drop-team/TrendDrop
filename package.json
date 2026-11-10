@@ -1,6 +1,7 @@
 {
   "name": "trenddrop",
   "private": true,
+  "type": "module",
   "scripts": {
     "dev": "next dev",
     "dev:backend": "NODE_ENV=development tsx backend/server.ts",

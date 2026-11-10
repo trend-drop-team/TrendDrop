@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { createHmac } from "node:crypto";
+import { createRequire } from "node:module";
 import { test } from "node:test";
 
 process.env.AUTH_SESSION_SECRET = "test-secret-do-not-use-in-prod";
@@ -10,8 +11,9 @@ function signPayload(payload: string) {
   return createHmac("sha256", process.env.AUTH_SESSION_SECRET!).update(payload).digest("base64url");
 }
 
-// require: sessionSecret()은 호출 시점에 process.env를 읽으므로, 위 설정이 먼저 끝난 뒤
-// 동기적으로 가져와야 한다(top-level await는 이 프로젝트의 CJS 빌드에서 쓸 수 없다).
+// sessionSecret()은 호출 시점에 process.env를 읽으므로, 위 설정이 먼저 끝난 뒤
+// 동기적으로 가져온다.
+const require = createRequire(import.meta.url);
 const { createSession, getUserId, decodeSession } = require("./auth") as typeof import("./auth");
 
 function requestWith(headers: Record<string, string>) {
