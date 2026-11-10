@@ -1,0 +1,82 @@
+name: Discord 알림
+
+on:
+  pull_request:
+    types: [opened, reopened, closed, ready_for_review, review_requested]
+  issues:
+    types: [opened, closed, reopened, labeled]
+  workflow_run:
+    workflows: ["CI", "collect (hourly)", "rank (1h)"]
+    types: [completed]
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Discord Webhook Secret 확인
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        run: |
+          if [ -z "$DISCORD_WEBHOOK_URL" ]; then
+            echo "DISCORD_WEBHOOK_URL secret이 설정되지 않았습니다." >&2
+            exit 1
+          fi
+
+      - name: Discord로 알림 전송
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_ACTION: ${{ github.event.action }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          PR_STATUS: ${{ github.event.pull_request.state }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+          ISSUE_AUTHOR: ${{ github.event.issue.user.login }}
+          ISSUE_STATUS: ${{ github.event.issue.state }}
+          ISSUE_URL: ${{ github.event.issue.html_url }}
+          WORKFLOW_NAME: ${{ github.event.workflow_run.name }}
+          WORKFLOW_AUTHOR: ${{ github.event.workflow_run.actor.login }}
+          WORKFLOW_STATUS: ${{ github.event.workflow_run.conclusion }}
+          WORKFLOW_URL: ${{ github.event.workflow_run.html_url }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          case "$EVENT_NAME" in
+            pull_request)
+              title="$PR_TITLE"
+              author="$PR_AUTHOR"
+              status="$PR_STATUS"
+              url="$PR_URL"
+              emoji="📣"
+              ;;
+            issues)
+              title="$ISSUE_TITLE"
+              author="$ISSUE_AUTHOR"
+              status="$ISSUE_STATUS"
+              url="$ISSUE_URL"
+              emoji="📝"
+              ;;
+            workflow_run)
+              title="$WORKFLOW_NAME"
+              author="$WORKFLOW_AUTHOR"
+              status="$WORKFLOW_STATUS"
+              url="$WORKFLOW_URL"
+              emoji="⚙️"
+              ;;
+            *)
+              echo "지원하지 않는 이벤트입니다: $EVENT_NAME" >&2
+              exit 1
+              ;;
+          esac
+
+          message=$(printf '%s %s: %s\n작성자: %s\n상태: %s\n링크: %s' \
+            "$emoji" "$EVENT_ACTION" "$title" "$author" "$status" "$url")
+
+          payload=$(jq -n --arg content "$message" '{content: $content}')
+          curl --fail-with-body --silent --show-error \
+            --header "Content-Type: application/json" \
+            --data "$payload" \
+            "$DISCORD_WEBHOOK_URL"
