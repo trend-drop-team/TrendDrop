@@ -1,10 +1,10 @@
-import { isDbConfigured } from "@/db";
-import { allowMockFallback, requireDbUnlessMockAllowed } from "@/lib/env";
-import { nowIso } from "@/lib/utils/date";
-import { mockCategories } from "@/mocks/trends/repository";
-import { dbCategories } from "@/server/repositories/category.repository";
-import type { ApiResult } from "@/types/api/common";
-import type { CategoryRow } from "@/types/api/category";
+import { isDbConfigured } from "../../db";
+import { allowMockFallback, requireDbUnlessMockAllowed } from "../../lib/env";
+import { nowIso } from "../../lib/utils/date";
+import { mockCategories } from "../../mocks/trends/repository";
+import { dbCategories } from "../repositories/category.repository";
+import type { ApiResult } from "../../types/api/common";
+import type { CategoryRow } from "../../types/api/category";
 
 /** 3.1 GET /api/categories */
 export async function getCategories(): Promise<ApiResult<CategoryRow[]>> {

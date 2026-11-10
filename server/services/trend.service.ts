@@ -1,13 +1,13 @@
-import { isDbConfigured } from "@/db";
-import { allowMockFallback, requireDbUnlessMockAllowed } from "@/lib/env";
-import { clockLabel, nowIso, relativeTime } from "@/lib/utils/date";
-import { normalize } from "@/lib/utils/normalize";
-import { mockDailyRows, mockTimeline } from "@/mocks/trends/repository";
-import type { TrendPeriod } from "@/server/http/query";
-import { dbDailyIngredients, dbTimelineIngredients, type TrendIngredients } from "@/server/repositories/trend.repository";
-import { byRank, parseReasons, SPARK_WINDOW, type RunRow, type SnapshotRow } from "@/server/repositories/shared";
-import type { ApiResult } from "@/types/api/common";
-import type { TickerRow, TimelineSnapshot, TrendRow } from "@/types/api/trend";
+import { isDbConfigured } from "../../db";
+import { allowMockFallback, requireDbUnlessMockAllowed } from "../../lib/env";
+import { clockLabel, nowIso, relativeTime } from "../../lib/utils/date";
+import { normalize } from "../../lib/utils/normalize";
+import { mockDailyRows, mockTimeline } from "../../mocks/trends/repository";
+import type { TrendPeriod } from "../http/query";
+import { dbDailyIngredients, dbTimelineIngredients, type TrendIngredients } from "../repositories/trend.repository";
+import { byRank, parseReasons, SPARK_WINDOW, type RunRow, type SnapshotRow } from "../repositories/shared";
+import type { ApiResult } from "../../types/api/common";
+import type { TickerRow, TimelineSnapshot, TrendRow } from "../../types/api/trend";
 
 /** 타임머신 슬라이더에 올릴 시점 개수. mock 스냅샷 개수와 맞춰 둔다. */
 const TIMELINE_RUNS = 12;

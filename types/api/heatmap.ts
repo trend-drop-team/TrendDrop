@@ -1,4 +1,4 @@
-import type { RunColumn } from "@/types/api/trend";
+import type { RunColumn } from "./trend";
 
 /** 3.5 GET /api/explore/heatmap */
 export type HeatmapPayload = {

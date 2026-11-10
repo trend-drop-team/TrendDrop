@@ -1,4 +1,4 @@
-import { realtimeTrends } from "@/mocks/trends/data";
+import { realtimeTrends } from "./data";
 
 /**
  * 시계열 스냅샷 레이어.

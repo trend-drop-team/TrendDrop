@@ -1,5 +1,5 @@
-import { getUserIdAndIssuedAt, type AuthRequest } from "@/server/http/auth";
-import { isSessionRevoked } from "@/server/services/session.service";
+import { getUserIdAndIssuedAt, type AuthRequest } from "./auth";
+import { isSessionRevoked } from "../services/session.service";
 
 /**
  * getUserId()의 폐기 인지(#94) 버전. Express 라우트(backend/server.ts)와 Next.js Route

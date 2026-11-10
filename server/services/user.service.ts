@@ -1,5 +1,5 @@
-import { isDbConfigured } from "@/db";
-import { dbGetUserRole } from "@/server/repositories/user.repository";
+import { isDbConfigured } from "../../db";
+import { dbGetUserRole } from "../repositories/user.repository";
 
 /** 'admin' 외 값(null 포함)은 전부 비관리자 — 화이트리스트 비교, 역할 체계가 늘어도 안전한 기본값. */
 export function isAdminRole(role: string | null): boolean {
