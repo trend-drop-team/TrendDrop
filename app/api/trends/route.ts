@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { parseLimit, parsePeriod, parseRunId } from "@/server/http/query";
 import { handleRouteError } from "@/server/http/errors";
+import { enforceReadRateLimit } from "@/lib/rate-limit";
 import { getTrends } from "@/server/services/trend.service";
 
 /**
@@ -10,6 +11,9 @@ import { getTrends } from "@/server/services/trend.service";
  * `runId`를 주면 그 시점 스냅샷을 그대로 돌려준다(홈 타임머신/타임랩스).
  */
 export async function GET(request: Request) {
+  const rateLimited = enforceReadRateLimit(request, "trends");
+  if (rateLimited) return rateLimited;
+
   const { searchParams } = new URL(request.url);
 
   try {

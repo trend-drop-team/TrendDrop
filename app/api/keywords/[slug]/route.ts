@@ -1,10 +1,14 @@
 import { NextResponse } from "next/server";
 
 import { handleRouteError } from "@/server/http/errors";
+import { enforceReadRateLimit } from "@/lib/rate-limit";
 import { getKeywordDetail } from "@/server/services/keyword.service";
 
 /** 3.3 GET /api/keywords/:slug — /trend/[slug] 상세 페이지. */
-export async function GET(_request: Request, { params }: { params: Promise<{ slug: string }> }) {
+export async function GET(request: Request, { params }: { params: Promise<{ slug: string }> }) {
+  const rateLimited = enforceReadRateLimit(request, "keyword-detail");
+  if (rateLimited) return rateLimited;
+
   const { slug } = await params;
 
   try {
