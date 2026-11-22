@@ -1,5 +1,5 @@
 # master에 머지될 때마다 돌면서, 마이그레이션이 껴 있으면 사람 승인(클릭) 후에만
-# 적용하고, 없으면 바로 Render 배포를 시작시킨다. (#109)
+# 적용하고, 없으면 바로 Vercel 배포를 시작시킨다. (#109)
 #
 # ★ 전체 흐름 (잡 3개로 나뉜다 — changes가 갈림길, migrate/deploy는 둘 중 하나만 돈다).
 #
@@ -9,26 +9,43 @@
 #     │      (Actions 탭에 "Review pending deployments" 배너, 리뷰어에게 알림 감)
 #     │    → 리뷰어가 Approve를 누르면 DATABASE_URL 시크릿에 접근 가능해지고
 #     │      마이그레이션이 실제로 돈다
-#     │    → 성공하면 마지막 스텝이 Render Deploy Hook을 호출해 배포를 시작시킨다
+#     │    → 성공하면 마지막 스텝이 Vercel Deploy Hook을 호출해 배포를 시작시킨다
 #     └─ 안 건드렸으면 → deploy 잡
-#          → 승인 없이 바로 Render Deploy Hook을 호출한다 (Render의 기존
-#            Auto-Deploy가 하던 일을 그대로 대신한다)
+#          → 승인 없이 바로 Vercel Deploy Hook을 호출한다 (Vercel의 기존
+#            Git 자동배포가 하던 일을 그대로 대신한다)
 #
 #   ★★ changes를 잡 트리거의 paths 필터(on.push.paths)가 아니라 잡 안의 git diff로
 #      판단하는 이유 — 처음엔 `on.push.paths: [drizzle/**]`로 워크플로 자체를
 #      걸렀는데, 그러면 drizzle/를 안 건드린 "보통의" 머지에는 이 워크플로가
-#      아예 시작을 안 한다. Render Auto-Deploy를 꺼둔 상태에서 이 워크플로의
+#      아예 시작을 안 한다. Vercel Git 자동배포를 꺼둔 상태에서 이 워크플로의
 #      Deploy Hook 호출이 사실상 유일한 배포 수단이 되므로, 그 경우 **코드가 영원히
 #      배포되지 않는다.** 그래서 트리거는 모든 master push에 걸어두고, "마이그레이션이
 #      있었나"는 changes 잡 안에서 판단해 migrate/deploy 둘 중 하나로만 갈라지게 했다.
 #
-#   Render의 "Auto-Deploy"는 꺼져 있어야 한다(레포 설정이 아니라 Render 대시보드
-#   설정이라 여기서 강제할 수 없다 — 꺼두지 않으면 master에 push되는 순간 Render가
+#   ★ 운영 배포 대상은 Render가 아니라 Vercel 프로젝트 `trenddrop-api`
+#     (trenddrop-api.vercel.app)다. 레포에 `render.yaml`이 아직 남아 있지만,
+#     실제 프로덕션 트래픽은 더 이상 Render로 가지 않는 것을 네트워크 탭으로
+#     직접 확인했다(2026-11-22). `api/**/*.ts`(Vercel Functions)가 이 프로젝트의
+#     실제 배포 산출물이고, PR #132~#137이 이걸 띄우기까지의 수정 이력이다.
+#     `render.yaml`·Render 서비스 자체의 정리(또는 폐기) 여부는 이 워크플로의
+#     범위 밖이라 별도로 다뤄야 한다.
+#
+#   Vercel의 "Git 자동배포"는 꺼져 있어야 한다(레포 설정이 아니라 Vercel 대시보드
+#   설정이라 여기서 강제할 수 없다 — 꺼두지 않으면 master에 push되는 순간 Vercel이
 #   이 워크플로와 무관하게 즉시 배포를 시작해서, 마이그레이션 승인 대기 중에 새
 #   코드가 먼저 떠버리는 경쟁 상태가 그대로 재현된다. 이게 애초에 이 체이닝을
-#   만든 이유다).
+#   만든 이유다. Vercel은 Render처럼 단순 토글 하나가 아니라 프로젝트 Settings →
+#   Git → Ignored Build Step 등으로 막아야 할 가능성이 높다 — 정확한 방법은
+#   Vercel 대시보드에서 직접 확인 필요).
 #
-# ★ 왜 자동 배포(Render buildCommand/preDeployCommand)에 바로 끼워 넣지 않았나.
+#   ★★★ 알려진 잔여 위험 — 같은 레포에서 Vercel 프로젝트 `trend-drop`(프론트엔드)도
+#     같이 배포되는데, `app/api/**`(Next.js Route Handler, 예: watchlist DELETE)가
+#     `server/services`를 거쳐 DB를 직접 건드리는 코드가 남아 있다. 이 워크플로는
+#     `trenddrop-api` 프로젝트의 Deploy Hook만 체이닝하므로 `trend-drop` 프로젝트의
+#     자동배포까지는 막지 못한다. 그 경로가 실제로 쓰이는지(혹은 제거 대상 잔재인지)
+#     확인 후, 필요하면 같은 패턴으로 두 번째 Deploy Hook을 추가해야 한다.
+#
+# ★ 왜 자동 배포(Vercel 빌드 파이프라인)에 바로 끼워 넣지 않았나.
 #   이 레포의 마이그레이션엔 ADD COLUMN만 있던 게 아니라 DROP도 있었다
 #   (drizzle/0003_drop_keyword_verdicts.sql). "머지하면 조건 없이 자동 적용"은
 #   되돌리기 어려운 변경이 그대로 반영된다는 뜻이라, 최소한 "사람이 한 번 보고
@@ -44,12 +61,17 @@
 #   아무 브랜치나 고를 수 있어서(자동 push 트리거와 달리), confirm 문자열 입력 +
 #   master 강제 체크를 그대로 둔다.
 #
-# ★ DATABASE_URL / RENDER_DEPLOY_HOOK_URL을 `secrets.*`로 그대로 참조하는 이유.
+# ★ DATABASE_URL / VERCEL_TRENDDROP_API_DEPLOY_HOOK_URL을 `secrets.*`로 그대로
+#   참조하는 이유.
 #   둘 다 레포 시크릿으로 등록한다(environment 시크릿이 아니라). DATABASE_URL은
 #   collect.yml·rank.yml이 이미 같은 이름으로 쓰고 있어 그대로 재사용한다.
-#   RENDER_DEPLOY_HOOK_URL은 deploy 잡(environment 바인딩 없음)과 migrate 잡
-#   (environment: production) 양쪽에서 다 접근해야 하므로 레포 시크릿으로 둬야
-#   한다 — environment 시크릿으로 등록하면 environment가 없는 deploy 잡은 못 읽는다.
+#   VERCEL_TRENDDROP_API_DEPLOY_HOOK_URL은 deploy 잡(environment 바인딩 없음)과
+#   migrate 잡(environment: production) 양쪽에서 다 접근해야 하므로 레포 시크릿으로
+#   둬야 한다 — environment 시크릿으로 등록하면 environment가 없는 deploy 잡은
+#   못 읽는다. 이름에 프로젝트명을 박아둔 이유는 같은 레포에 Vercel 프로젝트가
+#   `trenddrop-api`·`trend-drop` 둘이라 어느 쪽 Deploy Hook인지 헷갈리지 않게 하기
+#   위해서다(위 "알려진 잔여 위험" 참고 — `trend-drop`용 두 번째 시크릿이 늘어날
+#   가능성이 있다).
 #
 # 문서: issue #109
 
@@ -189,14 +211,14 @@ jobs:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
 
       # 마이그레이션이 성공했을 때만(이 스텝 앞에서 하나라도 실패하면 여기 오지 않는다)
-      # Render 배포를 시작시킨다.
-      - name: Render 배포 트리거
-        run: curl --fail --silent --show-error -X POST "$RENDER_DEPLOY_HOOK_URL"
+      # Vercel(trenddrop-api 프로젝트) 배포를 시작시킨다.
+      - name: Vercel 배포 트리거
+        run: curl --fail --silent --show-error -X POST "$VERCEL_TRENDDROP_API_DEPLOY_HOOK_URL"
         env:
-          RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+          VERCEL_TRENDDROP_API_DEPLOY_HOOK_URL: ${{ secrets.VERCEL_TRENDDROP_API_DEPLOY_HOOK_URL }}
 
-  # drizzle/**를 안 건드린 보통의 머지 — 승인 없이 바로 배포한다. Render의 기존
-  # Auto-Deploy를 대신하는 자리라 여기엔 environment를 안 건다(모든 배포에 승인을
+  # drizzle/**를 안 건드린 보통의 머지 — 승인 없이 바로 배포한다. Vercel의 기존
+  # Git 자동배포를 대신하는 자리라 여기엔 environment를 안 건다(모든 배포에 승인을
   # 요구하면 평소 작업 속도가 떨어진다 — 위험한 경우에만 migrate 잡에서 막는다).
   deploy:
     needs: changes
@@ -208,7 +230,7 @@ jobs:
       group: master-release-pipeline
       cancel-in-progress: false
     steps:
-      - name: Render 배포 트리거
-        run: curl --fail --silent --show-error -X POST "$RENDER_DEPLOY_HOOK_URL"
+      - name: Vercel 배포 트리거
+        run: curl --fail --silent --show-error -X POST "$VERCEL_TRENDDROP_API_DEPLOY_HOOK_URL"
         env:
-          RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+          VERCEL_TRENDDROP_API_DEPLOY_HOOK_URL: ${{ secrets.VERCEL_TRENDDROP_API_DEPLOY_HOOK_URL }}
