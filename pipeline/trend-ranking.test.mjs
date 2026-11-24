@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { extractNew, candidatesOf, linkCandidates, scoreCandidates } from "./trend-ranking.mjs";
+import { extractNew, candidatesOf, linkCandidates, scoreCandidates, rankSkipReason } from "./trend-ranking.mjs";
 const row = (site, text, rank = 1, bucket = 12, channel = "ch") => ({ site, kind: "title", text, textHash: `${site}:${text}:${channel}`, bucketAt: `2026-11-24T${bucket}:00:00.000Z`, videoId: site === "youtube" ? `${text}:${channel}` : null, meta: { rank, channelId: channel } });
 const cacheFor = (rows) => new Map(rows.filter((r) => r.site !== "xtrends").map((r) => [r.textHash, { keywords: [{ name: r.text, category: "작품·콘텐츠" }] }]));
 
@@ -80,4 +80,15 @@ test("추출과 연결 모두 Haiku를 기본 모델로 사용한다", async () 
   assert.deepEqual(used, ["claude-haiku-5-5", "claude-haiku-5-5"]);
   assert.equal(extraction.entries[0].model, "claude-haiku-5-5");
   assert.equal(links.model, "claude-haiku-5-5");
+});
+
+// #91 — 버킷 하나당 랭킹 1회
+test("같은 버킷에 저장된 랭킹이 없으면 건너뛰지 않는다", () => {
+  assert.equal(rankSkipReason("2026-11-24T15:00:00.000Z", null), null);
+});
+
+test("같은 버킷을 이미 랭킹했으면 run 번호와 함께 건너뛴다 (collect 실패·수동 재실행)", () => {
+  const reason = rankSkipReason("2026-11-24T15:00:00.000Z", { id: 3281, status: "partial" });
+  assert.match(reason, /2026-11-24T15:00:00.000Z/);
+  assert.match(reason, /run 3281/);
 });

@@ -128,3 +128,9 @@ export function scoreCandidates(candidates, groups, { windowHours = 6, topN = 10
 export function cacheVersion(model = CLAUDE_MODEL) {
   return `${CACHE_VERSION}:${createHash("sha256").update(model).digest("hex").slice(0, 8)}`;
 }
+
+/** 이 버킷을 이미 랭킹했으면 건너뛸 사유를, 아니면 null을 돌려준다(#91). */
+export function rankSkipReason(bucketAt, rankedRun) {
+  if (!rankedRun) return null;
+  return `버킷 ${bucketAt}은 이미 랭킹됨(run ${rankedRun.id}, ${rankedRun.status}) — 이후 새 수집이 없어 건너뜀`;
+}

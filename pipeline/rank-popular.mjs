@@ -1,6 +1,6 @@
 /** DB의 최근 6시간 → 새 원문 추출 1회 → 별칭 연결 1회 → 통합 Top10. */
-import { loadRecentItems, loadExtractions, saveExtractions, startRun, finishRun, saveTrendSnapshots, closeDb } from "./store.mjs";
-import { eligibleRows, extractNew, candidatesOf, linkCandidates, scoreCandidates, cacheVersion, PROFILE } from "./trend-ranking.mjs";
+import { loadRecentItems, loadExtractions, saveExtractions, startRun, finishRun, saveTrendSnapshots, findRankedRun, closeDb } from "./store.mjs";
+import { eligibleRows, extractNew, candidatesOf, linkCandidates, scoreCandidates, cacheVersion, rankSkipReason, PROFILE } from "./trend-ranking.mjs";
 
 import { generateJson, generateJsonWithRetry } from "./claude.mjs";
 
@@ -33,10 +33,9 @@ const topN = Number(process.env.TOP_N ?? 10);
 if (!Number.isInteger(hours) || hours < 1 || !Number.isInteger(topN) || topN < 1) throw new Error("HOURS와 TOP_N은 양의 정수여야 합니다.");
 if (process.argv.some((arg) => ["--general", "--culture", "--no-review"].includes(arg))) throw new Error("기존 랭킹 프로필 옵션은 더 이상 지원하지 않습니다.");
 let runId;
-try {
-  const rows = eligibleRows(await loadRecentItems(hours));
-  if (!rows.length) throw new Error("수집 데이터가 없습니다.");
-  const bucketAt = rows.at(-1).bucketAt;
+
+/** 한 버킷의 추출 → 별칭 연결 → 점수 → (저장). */
+async function rank(rows, bucketAt) {
   if (save) runId = await startRun({ pipeline: "popular", bucketAt, windowHours: hours, buckets: new Set(rows.map((r) => r.bucketAt)).size });
   const cache = await loadExtractions([...new Set(rows.filter((r) => r.site !== "xtrends").map((r) => r.textHash))], cacheVersion());
   const extraction = await extractNew(rows, cache, { generate });
@@ -51,6 +50,16 @@ try {
       apiCallLog: { provider: "anthropic", rankingProfile: PROFILE, calls, extraction: { ...extraction, entries: undefined }, links },
       errorMessage: extraction.deferred ? `호출 상한으로 신규 원문 ${extraction.deferred}개 다음 회차 대기` : null });
   }
+}
+
+try {
+  const rows = eligibleRows(await loadRecentItems(hours));
+  if (!rows.length) throw new Error("수집 데이터가 없습니다.");
+  const bucketAt = rows.at(-1).bucketAt;
+  // 버킷 하나당 랭킹 1회 — collect 실패·수동 재실행으로 같은 버킷을 또 저장하지 않는다(#91).
+  const skip = save ? rankSkipReason(bucketAt, await findRankedRun(bucketAt)) : null;
+  if (skip) console.log(`::warning title=rank 건너뜀::${skip}`);
+  else await rank(rows, bucketAt);
 } catch (error) {
   if (runId) await finishRun(runId, { status: "error", apiCallLog: { provider: "anthropic", rankingProfile: PROFILE, calls }, errorMessage: error.message });
   console.error(error.message);
