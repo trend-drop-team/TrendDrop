@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { generateJson, EXTRACT_MODELS } from "./gemini.mjs";
+import { generateJson, EXTRACT_MODELS, LINK_MODELS, withRoleModels } from "./gemini.mjs";
 import { cleanItem } from "./issues.mjs";
 
 export const CACHE_VERSION = "trend-extract-v1";
@@ -25,22 +25,23 @@ export function eligibleRows(rows) {
 }
 
 /** 매 실행 한 요청만 보낸다. 초과분은 캐시하지 않아 다음 실행에서 이어 처리한다. */
-export async function extractNew(rows, cache, { generate = generateJson, model = EXTRACT_MODELS[0] } = {}) {
+export async function extractNew(rows, cache, { generate = generateJson, model, models = EXTRACT_MODELS } = {}) {
   const unique = [...new Map(eligibleRows(rows).filter((r) => r.site !== "xtrends").map((r) => [r.textHash, r])).values()];
   const todo = unique.filter((r) => !cache.has(r.textHash));
   const batch = todo.slice(0, 50);
-  const stats = { requests: 0, cached: unique.length - todo.length, extracted: 0, deferred: todo.length - batch.length, model, entries: [] };
+  const stats = { requests: 0, cached: unique.length - todo.length, extracted: 0, deferred: todo.length - batch.length, model: model ?? models[0], entries: [] };
   if (!batch.length) return stats;
   stats.requests = 1;
   const schema = { type: "OBJECT", properties: { items: { type: "ARRAY", items: { type: "OBJECT", properties: { id: { type: "INTEGER" }, keywords: { type: "ARRAY", items: { type: "OBJECT", properties: { name: { type: "STRING" }, surface: { type: "STRING" }, category: { type: "STRING" } }, required: ["name", "surface", "category"] } } }, required: ["id", "keywords"] } } }, required: ["items"] };
   const input = batch.map((r, i) => ({ id: i + 1, source: r.site, text: r.text, newsTitles: r.site === "gtrends" ? r.meta?.newsTitles?.slice(0, 2) ?? [] : [] }));
-  const result = await generate(model, EXTRACT_SYSTEM, JSON.stringify({ items: input }), schema);
+  const { result, model: usedModel } = await withRoleModels(model ? [model] : models, (selected) => generate(selected, EXTRACT_SYSTEM, JSON.stringify({ items: input }), schema));
+  stats.model = usedModel;
   if (!Array.isArray(result?.items) || result.items.length !== batch.length) throw new Error("추출 응답 원문 ID 누락");
   const byId = new Map(result.items.map((item) => [item.id, item]));
   if (byId.size !== batch.length || batch.some((_, i) => !byId.has(i + 1))) throw new Error("추출 응답 ID 오류");
   const entries = batch.map((row, i) => {
     const { rejected: _rejected, ...entry } = cleanItem(byId.get(i + 1), row);
-    return { textHash: row.textHash, ...entry, model };
+    return { textHash: row.textHash, ...entry, model: usedModel };
   });
   for (const entry of entries) cache.set(entry.textHash, entry);
   stats.entries = entries;
@@ -78,13 +79,13 @@ export function validateLinks(result, candidates) {
   return result.groups;
 }
 
-export async function linkCandidates(candidates, { generate = generateJson, model = EXTRACT_MODELS[0] } = {}) {
-  if (candidates.length < 2) return { groups: [], requests: 0, model };
+export async function linkCandidates(candidates, { generate = generateJson, model, models = LINK_MODELS } = {}) {
+  if (candidates.length < 2) return { groups: [], requests: 0, model: model ?? models[0] };
   const input = candidates.map((c) => ({ id: c.id, term: c.term, context: [...new Set(c.observations.map((r) => `${r.site}: ${r.text}`))].slice(0, 2) }));
   const user = JSON.stringify(input);
   if (user.length > 100_000) throw new Error("키워드 연결 입력이 단일 요청 범위를 초과했습니다.");
-  const result = await generate(model, LINK_SYSTEM, user, LINK_SCHEMA);
-  return { groups: validateLinks(result, candidates), requests: 1, model };
+  const { result, model: usedModel } = await withRoleModels(model ? [model] : models, (selected) => generate(selected, LINK_SYSTEM, user, LINK_SCHEMA));
+  return { groups: validateLinks(result, candidates), requests: 1, model: usedModel };
 }
 
 export function scoreCandidates(candidates, groups, { windowHours = 6, topN = 10 } = {}) {

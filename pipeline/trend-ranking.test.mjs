@@ -66,3 +66,46 @@ test("Google 1위는 X 1위의 절반이며 표시 이름은 해시태그를 제
   assert.deepEqual(ranked.map((c) => [c.term, c.score]), [["해시태그", 50], ["검색어", 25]]);
   assert.equal(rows[0].text, "#해시태그");
 });
+
+test("추출 과부하 시 두 번째 Lite로 전환하고 실제 성공 모델을 캐시에 기록한다", async () => {
+  const rows = [row("youtube", "새 키워드")];
+  const tried = [];
+  const cache = new Map();
+  const stats = await extractNew(rows, cache, { generate: async (model) => {
+    tried.push(model);
+    if (tried.length === 1) throw Object.assign(new Error("overloaded"), { status: 503 });
+    return { items: [{ id: 1, keywords: [{ name: "새 키워드", surface: "새 키워드", category: "유행어·밈" }] }] };
+  } });
+  assert.deepEqual(tried, ["gemini-3.5-flash-lite", "gemini-3.1-flash-lite"]);
+  assert.equal(stats.model, "gemini-3.1-flash-lite");
+  assert.equal(cache.get(rows[0].textHash).model, "gemini-3.1-flash-lite");
+});
+test("별칭 연결은 Flash를 먼저 쓰고 한도 초과일 때 다음 Flash로 전환한다", async () => {
+  const candidates = candidatesOf([row("xtrends", "두쫀쿠"), row("xtrends", "두바이 쫀득 쿠키")], new Map());
+  const tried = [];
+  const result = await linkCandidates(candidates, { generate: async (model) => {
+    tried.push(model);
+    if (tried.length === 1) throw Object.assign(new Error("quota"), { status: 429 });
+    return { groups: [[1, 2]] };
+  } });
+  assert.deepEqual(tried, ["gemini-3.8-flash", "gemini-3.6-flash"]);
+  assert.equal(result.model, "gemini-3.6-flash");
+});
+test("Flash가 모두 한도 초과면 연결도 Lite를 사용할 수 있다", async () => {
+  const candidates = candidatesOf([row("xtrends", "a"), row("xtrends", "b")], new Map());
+  const tried = [];
+  const result = await linkCandidates(candidates, { generate: async (model) => {
+    tried.push(model);
+    if (model.includes("flash-lite")) return { groups: [] };
+    throw Object.assign(new Error("quota"), { status: 429 });
+  } });
+  assert.deepEqual(tried, ["gemini-3.8-flash", "gemini-3.6-flash", "gemini-3.5-flash-lite"]);
+  assert.equal(result.model, "gemini-3.5-flash-lite");
+});
+test("인증 오류에는 다른 모델을 사용하지 않는다", async () => {
+  let calls = 0;
+  await assert.rejects(extractNew([row("youtube", "a")], new Map(), { generate: async () => {
+    calls++; throw Object.assign(new Error("bad key"), { status: 401 });
+  } }), (e) => e.status === 401);
+  assert.equal(calls, 1);
+});
