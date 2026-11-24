@@ -1,34 +1,31 @@
 /** DB의 최근 6시간 → 새 원문 추출 1회 → 별칭 연결 1회 → 통합 Top10. */
-import { loadRecentItems, loadExtractions, saveExtractions, startRun, finishRun, saveTrendSnapshots, loadDailyModelBlocks, closeDb } from "./store.mjs";
+import { loadRecentItems, loadExtractions, saveExtractions, startRun, finishRun, saveTrendSnapshots, closeDb } from "./store.mjs";
 import { eligibleRows, extractNew, candidatesOf, linkCandidates, scoreCandidates, cacheVersion, PROFILE } from "./trend-ranking.mjs";
 
-import { generateJson } from "./gemini.mjs";
+import { generateJson, generateJsonWithRetry } from "./claude.mjs";
 
 const calls = [];
-let blockedModels = new Set();
 const recordAttempt = async (model, system, user, schema) => {
-  if (blockedModels.has(model)) throw Object.assign(new Error(`${model}: 일일 한도 소진으로 건너뜀`), { status: 429 });
-  if (calls.length >= 4) throw new Error("이번 실행의 Gemini 요청 상한 4회에 도달했습니다.");
+  if (calls.length >= 4) throw new Error("이번 실행의 Claude 요청 상한 4회에 도달했습니다.");
   const stage = schema.properties.groups ? "link" : "extract";
   const attempt = calls.filter((call) => call.stage === stage).length + 1;
   const call = { stage, attempt, model, status: "running" };
-  console.log(`[Gemini] ${stage}: attempt ${attempt}, model ${model}`);
+  console.log(`[Claude] ${stage}: attempt ${attempt}, model ${model}`);
   calls.push(call);
   try {
-    const result = await generateJson(model, system, user, schema);
+    const result = await generateJson(model, system, user, schema, { onUsage: (usage) => { call.usage = usage; } });
     call.status = "success";
     return result;
   } catch (error) {
     call.status = "error";
     call.error = error.message;
     call.httpStatus = error.status ?? null;
-    call.dailyQuota = error.status === 429 && /per.?day|requestsperday|RPD/i.test(error.message);
-    if (call.dailyQuota) blockedModels.add(model);
     throw error;
   }
 };
 
-const generate = recordAttempt;
+const generate = (model, system, user, schema) =>
+  generateJsonWithRetry(model, system, user, schema, { generate: recordAttempt });
 
 const save = process.argv.includes("--save");
 const hours = Number(process.env.HOURS ?? 6);
@@ -41,7 +38,6 @@ try {
   if (!rows.length) throw new Error("수집 데이터가 없습니다.");
   const bucketAt = rows.at(-1).bucketAt;
   if (save) runId = await startRun({ pipeline: "popular", bucketAt, windowHours: hours, buckets: new Set(rows.map((r) => r.bucketAt)).size });
-  blockedModels = await loadDailyModelBlocks();
   const cache = await loadExtractions([...new Set(rows.filter((r) => r.site !== "xtrends").map((r) => r.textHash))], cacheVersion());
   const extraction = await extractNew(rows, cache, { generate });
   if (save) await saveExtractions(extraction.entries, cacheVersion());
@@ -52,11 +48,11 @@ try {
   if (save) {
     await saveTrendSnapshots(runId, bucketAt, ranked, { rankingProfile: PROFILE });
     await finishRun(runId, { status: extraction.deferred ? "partial" : "success", rawSignalCount: rows.length, keywordCount: ranked.length, filtered: false,
-      apiCallLog: { rankingProfile: PROFILE, calls, extraction: { ...extraction, entries: undefined }, links },
+      apiCallLog: { provider: "anthropic", rankingProfile: PROFILE, calls, extraction: { ...extraction, entries: undefined }, links },
       errorMessage: extraction.deferred ? `호출 상한으로 신규 원문 ${extraction.deferred}개 다음 회차 대기` : null });
   }
 } catch (error) {
-  if (runId) await finishRun(runId, { status: "error", apiCallLog: { rankingProfile: PROFILE, calls }, errorMessage: error.message });
+  if (runId) await finishRun(runId, { status: "error", apiCallLog: { provider: "anthropic", rankingProfile: PROFILE, calls }, errorMessage: error.message });
   console.error(error.message);
   process.exitCode = 1;
 } finally {

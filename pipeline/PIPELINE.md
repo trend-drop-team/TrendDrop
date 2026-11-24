@@ -7,7 +7,7 @@
 
 ```text
 collect: X 목록 50개 + 유튜브 인기 제목 20개 + Google Trends RSS 전체 → raw_signals
-rank: 최근 6시간 → 유튜브·RSS 새 원문 추출 → 전체 후보 별칭 연결 → 점수 → Top10
+rank: 최근 6시간 → 유튜브·RSS Haiku 새 원문 추출 → Haiku 전체 후보 별칭 연결 → 점수 → Top10
 ```
 
 ### 수집
@@ -22,27 +22,23 @@ rank: 최근 6시간 → 유튜브·RSS 새 원문 추출 → 전체 후보 별�
 - 수집은 Gemini를 호출하지 않는다. 한 소스 실패 시 나머지를 저장하고 partial로 기록한다.
 - 원문 해시는 소스·영상 ID·제목·관련 뉴스 제목으로 계산한다. 조회수·순위 변화만으로 재추출하지 않는다.
 
-### Gemini: 정상 실행당 최대 2회, 일시적 오류 시 최대 4회
+### Claude Haiku: 정상 실행당 최대 2회
 
-추출은 `EXTRACT_MODELS`(3.5 Lite → 3.1 Lite), 연결은 `LINK_MODELS`(3.8 Flash → 3.6 Flash → 3.5 Lite → 3.1 Lite)를 사용한다.
-정상 응답이면 즉시 종료한다. 429·500·502·503·504·타임아웃 때만 다음 모델로 넘어간다.
-같은 모델 재시도는 하지 않는다. 실제 HTTP 요청은 실행 전체에서 최대 4회다.
-일일 한도 오류(RPD)가 확인된 모델은 기존 실행 로그에 기록하고 Pacific 자정까지 다음 실행에서도 건너뛴다.
-RPM 오류·503은 해당 실행에서만 다음 모델로 전환한다. 인증·잘못된 응답은 즉시 실패한다.
-실제 사용 모델을 추출 캐시와 단계별 실행 로그에 남긴다.
+추출·별칭 연결 모두 `CLAUDE_MODEL`(기본 `claude-haiku-5-5`)을 사용한다.
+`ANTHROPIC_API_KEY`가 필요하다. 운영 rank는 Gemini를 호출하지 않는다.
 
 1. 유튜브·RSS의 캐시에 없는 원문 최대 50개를 한 번에 추출한다. 원문당 키워드는 최대 2개다.
-   나머지는 캐시하지 않고 다음 실행으로 넘긴다. 대기 원문 수를 로그에 남긴다.
-   캐시 버전은 `trend-extract-v1:<모델 해시>`다. 저장 실행은 연결 실패 전에도 추출 캐시를 저장한다.
+   초과분은 다음 회차로 넘긴다. 캐시는 `claude-extract-v1:<모델 해시>`로 구분한다.
 2. X 이름은 그대로 후보로 사용한다. 전체 후보를 한 번에 보내 동일 대상의 별칭·약칭·번역만 연결한다.
    인물과 작품처럼 관련만 있는 대상은 묶지 않는다. 적합성 검수·제외는 하지 않는다.
-   모델은 기존 후보 ID만 반환할 수 있다. 미등록·중복 ID가 나오면 순위를 저장하지 않는다.
-   이전 검수에서 만든 별칭 사전은 재사용하지 않는다. 연결 결과는 해당 실행 로그에 남긴다.
 
-새 원문이 없으면 추출을 생략한다. 후보가 2개 미만이면 연결을 생략한다.
-연결 입력이 100,000자를 넘으면 실패로 기록한다. 크기 초과를 해결하기 위한 추가 호출이나 임의 후보 절단은 하지 않는다.
-추출 누락·연결 오류·API 실패 시 해당 순위 저장을 중단한다.
-호출 상한은 rank 실행당 기준이다. 수동 재실행은 별도 실행으로 계산한다.
+Claude Messages API의 JSON Schema 출력으로 요청하며 입력 ID 누락·중복과 연결 ID를 코드로 검증한다.
+응답이 잘리거나 거부되면 순위를 저장하지 않는다. 실제 입력·출력 토큰을 실행 로그에 남긴다.
+새 원문이 없으면 추출을 생략하고 후보가 2개 미만이면 연결을 생략한다.
+429·500·502·503·504·529·타임아웃만 5초 뒤 한 번 재시도한다.
+인증·결제·잘못된 응답은 재시도하지 않는다. 정상 최대 2회, 재시도 포함 실행 전체 최대 4회다.
+추출 캐시는 연결 전 저장해 연결 실패 시 재추출을 줄인다. 수동 재실행은 별도 실행으로 계산한다.
+연결 입력이 100,000자를 넘으면 추가 호출이나 후보 절단 없이 실패한다.
 
 ### 점수
 
@@ -65,13 +61,13 @@ RPM 오류·503은 해당 실행에서만 다음 모델로 전환한다. 인증�
 
 - `npm run collect`: 로컬 env로 수집·저장.
 - `npm run rank`: 로컬 env로 추출·연결·순위 저장. `rankingProfile=x-youtube-rss-v1`.
-- `node --env-file=.env.local pipeline/rank-popular.mjs`: DB를 읽고 Gemini를 호출하지만 결과는 저장하지 않는다.
+- `node --env-file=.env.local pipeline/rank-popular.mjs`: DB를 읽고 Claude를 호출하지만 결과는 저장하지 않는다.
 - `node --env-file=.env.local pipeline/experiments/preview-current.mjs`: 현재 한 회차를 수집해
   DB 저장 없이 실행한다. `/tmp/trenddrop-138-preview/report.json`에 실제 입력·응답·점수를 기록한다.
-  이 실험은 1시간 창으로 계산한다. `--replay`는 저장된 수집 데이터를 재사용하고 Gemini만 다시 호출한다.
+  이 실험은 1시간 창으로 계산한다. `--replay`는 저장된 수집 데이터를 재사용하고 Claude만 다시 호출한다.
 - `HOURS` 기본 6, `TOP_N` 기본 10. `--general`, `--culture`, `--no-review`는 지원하지 않는다.
 - Actions collect에 `TWITTERAPI_IO_KEY`, `YOUTUBE_API_KEY`, `DATABASE_URL`, rank에
-  `GEMINI_API_KEY`, `DATABASE_URL` 시크릿이 필요하다.
+  `ANTHROPIC_API_KEY`, `DATABASE_URL` 시크릿이 필요하다.
 - 테이블은 기존 `raw_signals`, `text_extractions`, `collection_runs`, `trend_snapshots`를 사용한다.
   스키마 변경은 없다. 이전 원문·순위·소스 레코드는 삭제하지 않는다.
 
