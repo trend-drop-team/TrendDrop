@@ -15,13 +15,13 @@
  * 앞 모델이 과부하(503)·한도 초과(429)·타임아웃으로 실패하면 다음 모델로 넘긴다.
  * 무료 등급은 입력이 Google 제품 개선에 쓰일 수 있다. 공개 게시글 제목만 보내므로 무방.
  */
-import { setTimeout as delay } from "node:timers/promises";
-
 const list = (v) => v.split(",").map((m) => m.trim()).filter(Boolean);
 
 export const EXTRACT_MODELS = list(
   process.env.EXTRACT_MODELS || "gemini-3.5-flash-lite,gemini-3.1-flash-lite"
 );
+export const LINK_MODELS = list(process.env.LINK_MODELS || "gemini-3.8-flash,gemini-3.6-flash,gemini-3.5-flash-lite,gemini-3.1-flash-lite");
+
 export const REVIEW_MODELS = list(
   process.env.REVIEW_MODELS || "gemini-3.8-flash,gemini-3.7-flash,gemini-3.6-flash,gemini-3.5-flash-lite"
 );
@@ -97,13 +97,15 @@ export async function generateJson(model, system, userText, schema) {
 }
 
 
-/** 일시적 서버 오류·타임아웃만 5초 뒤 한 번 재시도한다. 정상 요청은 추가 호출하지 않는다. */
-export async function generateJsonWithRetry(model, system, userText, schema, { generate = generateJson, wait = delay } = {}) {
-  try {
-    return await generate(model, system, userText, schema);
-  } catch (error) {
-    if (![500, 502, 503, 504].includes(error.status) && error.name !== "TimeoutError") throw error;
-    await wait(5000);
-    return generate(model, system, userText, schema);
+/** 정상 응답이면 즉시 종료하며 일시 오류·한도 초과일 때만 다음 모델을 사용한다. */
+export async function withRoleModels(models, generate) {
+  for (let i = 0; i < models.length; i++) {
+    const model = models[i];
+    try { return { result: await generate(model), model }; }
+    catch (error) {
+      if (![429, 500, 502, 503, 504].includes(error.status) && error.name !== "TimeoutError") throw error;
+      if (i === models.length - 1) throw error;
+    }
   }
+  throw new Error("사용할 Gemini 모델이 없습니다.");
 }

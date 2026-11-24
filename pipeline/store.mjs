@@ -445,3 +445,14 @@ async function tableExists(name) {
   const [row] = await s`SELECT to_regclass(${"public." + name}) AS reg`;
   return Boolean(row?.reg);
 }
+
+
+/** 일일 한도에 도달한 모델만 Pacific 일일 리셋까지 건너뛴다. RPM 오류·503은 다음 실행에서 다시 시도한다. */
+export async function loadDailyModelBlocks() {
+  const s = await sql();
+  const rows = await s`SELECT api_call_log FROM collection_runs
+    WHERE pipeline = 'popular'
+      AND started_at >= (date_trunc('day', now() AT TIME ZONE 'America/Los_Angeles') AT TIME ZONE 'America/Los_Angeles')
+      AND api_call_log IS NOT NULL`;
+  return new Set(rows.flatMap((r) => r.api_call_log?.calls ?? []).filter((c) => c.dailyQuota === true).map((c) => c.model));
+}
