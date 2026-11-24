@@ -1,4 +1,4 @@
-# 매시간 5개 소스(dcbest·theqoo·instiz·youtube·gtrends)를 긁어 raw_signals에 쌓는다.
+# 매시간 X 트렌드·유튜브 제목 20개·Google RSS를 raw_signals에 쌓는다.
 # 로컬 launchd(com.trendrising.hourly)가 하던 일을 그대로 넘겨받는 자리다.
 #
 # ★ 이 워크플로는 LLM(Gemini API)을 쓰지 않는다. LLM 호출은 rank.yml에 있다.
@@ -73,6 +73,7 @@ jobs:
           # 매시간 프로세스 하나뿐이라 pooled가 필요 없다.
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
+          TWITTERAPI_IO_KEY: ${{ secrets.TWITTERAPI_IO_KEY }}
           # 민감값이 아니라 secrets로 두지 않았다.
           REGION_CODE: KR
           # ★ GEMINI_API_KEY를 일부러 주지 않는다.

@@ -1,13 +1,5 @@
-# 쌓인 raw_signals에서 최근 6시간을 꺼내 키워드 순위를 계산하고
-# trend_snapshots에 저장한다. (rank-popular.mjs --save)
-#
-# ★ LLM(Gemini API)을 쓰는 쪽은 여기다. issues.mjs가 글마다 키워드를 뽑고(추출),
-#   상위 후보를 한 번 더 검수(같은 뜻 합치기·일반어 빼기)한다. Google AI Studio 무료 등급.
-#   매시간 호출량: 추출 1~2회(새 글 50개 단위, Lite) + 검수 3회(과반 투표, Flash → Lite)
-#   → 하루 ~100회. Lite 한도(하루 500회) 안이다. 추출 결과는 text_extractions에 캐시돼
-#   창(6시간)이 1시간씩 밀려도 새 글만 다시 묻는다.
-
-# 문서: pipeline/PIPELINE.md 8-3
+# 최근 6시간 DB 원문 → 새 유튜브·RSS 추출 최대 1회 → 전체 후보 별칭 연결 최대 1회.
+# X는 추출·검수하지 않는다. 점수는 코드로 계산한다. 문서: pipeline/PIPELINE.md.
 
 name: rank (1h)
 
