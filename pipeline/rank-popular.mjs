@@ -2,11 +2,14 @@
 import { loadRecentItems, loadExtractions, saveExtractions, startRun, finishRun, saveTrendSnapshots, closeDb } from "./store.mjs";
 import { eligibleRows, extractNew, candidatesOf, linkCandidates, scoreCandidates, cacheVersion, PROFILE } from "./trend-ranking.mjs";
 
-import { generateJson } from "./gemini.mjs";
+import { generateJson, generateJsonWithRetry } from "./gemini.mjs";
 
 const calls = [];
-const generate = async (model, system, user, schema) => {
-  const call = { stage: schema.properties.groups ? "link" : "extract", model, status: "running" };
+const recordAttempt = async (model, system, user, schema) => {
+  const stage = schema.properties.groups ? "link" : "extract";
+  const attempt = calls.filter((call) => call.stage === stage).length + 1;
+  const call = { stage, attempt, model, status: "running" };
+  console.log(`[Gemini] ${stage}: attempt ${attempt}`);
   calls.push(call);
   try {
     const result = await generateJson(model, system, user, schema);
@@ -15,9 +18,13 @@ const generate = async (model, system, user, schema) => {
   } catch (error) {
     call.status = "error";
     call.error = error.message;
+    call.httpStatus = error.status ?? null;
     throw error;
   }
 };
+
+const generate = (model, system, user, schema) =>
+  generateJsonWithRetry(model, system, user, schema, { generate: recordAttempt });
 
 const save = process.argv.includes("--save");
 const hours = Number(process.env.HOURS ?? 6);
@@ -36,7 +43,7 @@ try {
   const candidates = candidatesOf(rows, cache);
   const links = await linkCandidates(candidates, { generate });
   const ranked = scoreCandidates(candidates, links.groups, { windowHours: hours, topN });
-  console.log(JSON.stringify({ bucketAt, windowHours: hours, extraction: { ...extraction, entries: undefined }, links, candidates: candidates.length, ranked }, null, 2));
+  console.log(JSON.stringify({ bucketAt, calls, windowHours: hours, extraction: { ...extraction, entries: undefined }, links, candidates: candidates.length, ranked }, null, 2));
   if (save) {
     await saveTrendSnapshots(runId, bucketAt, ranked, { rankingProfile: PROFILE });
     await finishRun(runId, { status: extraction.deferred ? "partial" : "success", rawSignalCount: rows.length, keywordCount: ranked.length, filtered: false,

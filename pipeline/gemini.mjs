@@ -15,6 +15,8 @@
  * 앞 모델이 과부하(503)·한도 초과(429)·타임아웃으로 실패하면 다음 모델로 넘긴다.
  * 무료 등급은 입력이 Google 제품 개선에 쓰일 수 있다. 공개 게시글 제목만 보내므로 무방.
  */
+import { setTimeout as delay } from "node:timers/promises";
+
 const list = (v) => v.split(",").map((m) => m.trim()).filter(Boolean);
 
 export const EXTRACT_MODELS = list(
@@ -92,4 +94,16 @@ export async function generateJson(model, system, userText, schema) {
   const text = candidate?.content?.parts?.map((p) => p.text ?? "").join("");
   if (!text) throw new Error("응답에 텍스트가 없음");
   return JSON.parse(text);
+}
+
+
+/** 일시적 서버 오류·타임아웃만 5초 뒤 한 번 재시도한다. 정상 요청은 추가 호출하지 않는다. */
+export async function generateJsonWithRetry(model, system, userText, schema, { generate = generateJson, wait = delay } = {}) {
+  try {
+    return await generate(model, system, userText, schema);
+  } catch (error) {
+    if (![500, 502, 503, 504].includes(error.status) && error.name !== "TimeoutError") throw error;
+    await wait(5000);
+    return generate(model, system, userText, schema);
+  }
 }
