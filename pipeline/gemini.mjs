@@ -20,8 +20,6 @@ const list = (v) => v.split(",").map((m) => m.trim()).filter(Boolean);
 export const EXTRACT_MODELS = list(
   process.env.EXTRACT_MODELS || "gemini-3.5-flash-lite,gemini-3.1-flash-lite"
 );
-export const LINK_MODELS = list(process.env.LINK_MODELS || "gemini-3.8-flash,gemini-3.6-flash,gemini-3.5-flash-lite,gemini-3.1-flash-lite");
-
 export const REVIEW_MODELS = list(
   process.env.REVIEW_MODELS || "gemini-3.8-flash,gemini-3.7-flash,gemini-3.6-flash,gemini-3.5-flash-lite"
 );
@@ -94,18 +92,4 @@ export async function generateJson(model, system, userText, schema) {
   const text = candidate?.content?.parts?.map((p) => p.text ?? "").join("");
   if (!text) throw new Error("응답에 텍스트가 없음");
   return JSON.parse(text);
-}
-
-
-/** 정상 응답이면 즉시 종료하며 일시 오류·한도 초과일 때만 다음 모델을 사용한다. */
-export async function withRoleModels(models, generate) {
-  for (let i = 0; i < models.length; i++) {
-    const model = models[i];
-    try { return { result: await generate(model), model }; }
-    catch (error) {
-      if (![429, 500, 502, 503, 504].includes(error.status) && error.name !== "TimeoutError") throw error;
-      if (i === models.length - 1) throw error;
-    }
-  }
-  throw new Error("사용할 Gemini 모델이 없습니다.");
 }

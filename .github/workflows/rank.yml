@@ -1,5 +1,5 @@
 # 최근 6시간 DB 원문 → 새 유튜브·RSS 추출 최대 1회 → 전체 후보 별칭 연결 최대 1회.
-# 정상 Gemini 최대 2회. 429·서버 오류·타임아웃 시 다음 모델로 전환(실행 전체 최대 4회).
+# 정상 Claude Haiku 최대 2회. 429·서버 오류·타임아웃 시 한 번 재시도(실행 전체 최대 4회).
 # X는 추출·검수하지 않는다. 점수는 코드로 계산한다. 문서: pipeline/PIPELINE.md.
 
 name: rank (1h)
@@ -47,6 +47,6 @@ jobs:
         env:
           # collect.yml과 같은 Neon direct 문자열.
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          # Google AI Studio에서 발급한 키. gemini.mjs가 SDK 없이 fetch로 호출한다.
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          # Anthropic API 키. 추출·별칭 연결 모두 Claude Haiku를 사용한다.
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           # YOUTUBE_API_KEY는 필요 없다 — rank는 수집을 하지 않고 DB만 읽는다.
