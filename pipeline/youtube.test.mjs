@@ -2,23 +2,22 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { collect } from "./sources/youtube.mjs";
 
-test("분야별 영상 수집은 중복을 제거하고 채널 맥락을 보존한다", async (context) => {
-  context.mock.method(globalThis, "fetch", async (input) => {
-    const url = new URL(input);
-    if (url.pathname.endsWith("commentThreads")) return { json: async () => ({ items: [] }) };
-    const category = url.searchParams.get("videoCategoryId") ?? "general";
-    const video = (id) => ({ id, snippet: { title: id, channelTitle: "채널", channelId: "channel", categoryId: category }, statistics: {} });
-    return { json: async () => ({ items: [video("shared"), video(category)] }) };
-  });
+test("유튜브는 전체 인기 20개를 1회 요청하고 댓글·분야는 요청하지 않는다", async (context) => {
   const previous = process.env.YOUTUBE_API_KEY;
   process.env.YOUTUBE_API_KEY = "test-key";
-  try {
-    const items = await collect();
-    assert.equal(items.length, 6);
-    assert.equal(items.filter((item) => item.meta.videoId === "shared").length, 1);
-    assert.ok(items.every((item) => item.meta.channelId === "channel"));
-  } finally {
-    if (previous === undefined) delete process.env.YOUTUBE_API_KEY;
-    else process.env.YOUTUBE_API_KEY = previous;
-  }
+  context.after(() => { if (previous === undefined) delete process.env.YOUTUBE_API_KEY; else process.env.YOUTUBE_API_KEY = previous; });
+  let calls = 0;
+  context.mock.method(globalThis, "fetch", async (input) => {
+    calls++;
+    const url = new URL(input);
+    assert.ok(url.pathname.endsWith("/videos"));
+    assert.equal(url.searchParams.get("maxResults"), "20");
+    assert.equal(url.searchParams.has("videoCategoryId"), false);
+    return { ok: true, json: async () => ({ items: [{ id: "v", snippet: { title: "제목", channelId: "channel" }, statistics: {} }] }) };
+  });
+  const items = await collect();
+  assert.equal(calls, 1);
+  assert.equal(items.length, 1);
+  assert.equal(items[0].unit, "title");
+  assert.equal(items[0].meta.channelId, "channel");
 });

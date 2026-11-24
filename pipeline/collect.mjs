@@ -20,7 +20,7 @@ import { activeAdapters } from "./adapters.mjs";
 import { EXCLUDED_SOURCES } from "./sources/excluded-sources.mjs";
 import { insertRawItems, startRun, finishRun, closeDb } from "./store.mjs";
 
-// 더쿠·인스티즈는 2026-10-21부터 EXCLUDED_SOURCES로 실행에서 뺀다(목록·import는 되돌리기 쉽게 남김).
+// 디시·더쿠·인스티즈는 EXCLUDED_SOURCES로 실행에서 뺀다(목록·import는 되돌리기 쉽게 남김).
 // 네이트판은 2026-08-03에 제외했다 — 사연·신변잡기 위주라 트렌드 키워드가 거의 안 나왔다.
 const ADAPTERS = [
   ["dcbest", dcbest],
@@ -75,7 +75,7 @@ async function main() {
         site: it.source,
         kind: it.unit,
         text: it.text,
-        textHash: sha1(it.text),
+        textHash: sha1(JSON.stringify([it.source, it.meta?.videoId ?? null, it.text, it.meta?.newsTitles ?? []])),
         meta: it.meta ?? null,
         bucketAt: bucket,
         capturedAt: collectedAt,

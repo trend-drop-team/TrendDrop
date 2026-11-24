@@ -211,7 +211,7 @@ export async function insertRawItems(rows, runId) {
  * 기준점은 now()가 아니라 max(bucket_at): 이번 시각 수집이 실패해도 직전 데이터로
  * 랭킹은 나오게 하되, 호출 측이 기준 시각을 출력해 오래된 데이터를 알아채게 한다.
  * 디시 뉴스 갤러리(EXCLUDED_GALLERIES)는 여기서 거른다 — 수집 단계 제외 전에 쌓인 과거 글도 순위에서 빠진다.
- * 제외 소스(EXCLUDED_SOURCES: 더쿠·인스티즈, 2026-10-21)도 여기서 거른다 — raw_signals·SOURCE_SEED는 그대로.
+ * 제외 소스(EXCLUDED_SOURCES: 디시·더쿠·인스티즈)도 여기서 거른다 — raw_signals·SOURCE_SEED는 그대로.
  */
 export async function loadRecentItems(hours = 6, { offsetHours = 0 } = {}) {
   const s = await sql();
@@ -224,6 +224,8 @@ export async function loadRecentItems(hours = 6, { offsetHours = 0 } = {}) {
                       - make_interval(hours => ${hours + offsetHours})
       AND r.bucket_at <= (SELECT max(bucket_at) FROM raw_signals)
                       - make_interval(hours => ${offsetHours})
+      AND r.source = 'title'
+      AND src.kind = ANY(${['xtrends', 'youtube', 'gtrends']}::text[])
       AND NOT (src.kind = 'dcbest' AND COALESCE(r.meta->>'gallery', '') = ANY(${EXCLUDED_GALLERIES}::text[]))
       AND NOT (src.kind = ANY(${EXCLUDED_SOURCES}::text[]))
     ORDER BY r.bucket_at, r.id`;
@@ -360,6 +362,7 @@ export async function saveTrendSnapshots(runId, bucketAt, ranked, { rankingProfi
       const reasons = (k.sources ?? []).map((src, idx) => ({
         source: src.source,
         weight: src.weightSum,
+        ...(idx === 0 && k.crossBonus != null ? { crossBonus: k.crossBonus } : {}),
         ...(idx === 0 && k.sample ? { text: k.sample, sample: k.sample } : {}),
         ...(idx === 0 && k.evidence ? { editorial: { parentEntity: k.parentEntity, phenomenon: k.phenomenon, kind: k.kind,
           domain: k.domain, meaningUnresolved: k.meaningUnresolved ?? false, evidence: k.evidence, discovery: k.discovery } } : {}),

@@ -40,6 +40,8 @@ test("입력 배열을 바꾸지 않는다", () => {
   assert.equal(all.length, 2);
 });
 
-test("EXCLUDED_SOURCES는 더쿠·인스티즈다", () => {
-  assert.deepEqual(EXCLUDED_SOURCES, ["theqoo", "instiz"]);
+test("커뮤니티를 제외하고 X·유튜브·RSS만 수집한다", () => {
+  const names = ["dcbest", "theqoo", "instiz", "youtube", "gtrends", "xtrends"];
+  const adapters = names.map((name) => [name, f]);
+  assert.deepEqual(activeAdapters(adapters, EXCLUDED_SOURCES).map(([name]) => name), ["youtube", "gtrends", "xtrends"]);
 });
