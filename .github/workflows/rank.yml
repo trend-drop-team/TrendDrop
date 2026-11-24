@@ -1,52 +1,23 @@
-# 최근 6시간 DB 원문 → 새 유튜브·RSS 추출 최대 1회 → 전체 후보 별칭 연결 최대 1회.
-# 정상 Gemini 최대 2회. 429·서버 오류·타임아웃 시 다음 모델로 전환(실행 전체 최대 4회).
-# X는 추출·검수하지 않는다. 점수는 코드로 계산한다. 문서: pipeline/PIPELINE.md.
-
-name: rank (1h)
-
+name: Gemini request diagnostic
 on:
-  # 유일한 트리거다. 외부 스케줄러(cron-job.org)가 매시간 :20에
-  # workflow_dispatch API를 호출한다.
-  # collect(:05)보다 15분 뒤인 이유 — 같은 시각에 걸면 collect가 아직
-  # 쓰고 있는 버킷을 rank가 읽어 반쪽짜리 집계가 나온다. 수집 실측이
-  # 1분 안쪽이라 15분이면 충분한 여유다.
-  #
-  # ★ GitHub의 schedule:은 제거했다. 예전에 2시간 주기로 걸어뒀지만
-  #   실제로는 하루 5.31회(기대 12회)만 실행됐다. 판단 근거와 실측치는
-  #   collect.yml 주석과 pipeline/PIPELINE.md 8-3에 있다.
   workflow_dispatch:
-
+    inputs:
+      expected_key_sha256:
+        description: Local key digest for equality check only
+        required: true
+        type: string
 permissions:
   contents: read
-
-concurrency:
-  group: pipeline-rank
-  cancel-in-progress: false
-
 jobs:
-  rank:
+  diagnose:
     runs-on: ubuntu-latest
-    # LLM 호출(추출·검수)이 붙어서 collect보다 오래 걸린다. 평소 1분 안팎,
-    # 프롬프트 버전을 올린 직후엔 창 안 글 ~330개를 새로 뽑아 1~2분.
-    timeout-minutes: 20
-
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-node@v4
         with:
           node-version: 24
-          cache: npm
-
-      # devDependencies는 파이프라인이 쓰지 않으므로 제외한다.
-      - run: npm ci --omit=dev
-
-      # --save가 붙어야 DB에 쓴다. 빼면 계산해서 로그로 출력만 하고 끝난다.
-      # (점수 공식을 실험할 때 쓰는 안전장치라 여기서는 반드시 붙인다)
-      - run: node pipeline/rank-popular.mjs --save
+      - run: node pipeline/experiments/gemini-diagnostic.mjs
         env:
-          # collect.yml과 같은 Neon direct 문자열.
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          # Google AI Studio에서 발급한 키. gemini.mjs가 SDK 없이 fetch로 호출한다.
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          # YOUTUBE_API_KEY는 필요 없다 — rank는 수집을 하지 않고 DB만 읽는다.
+          EXPECTED_KEY_SHA256: ${{ inputs.expected_key_sha256 }}
