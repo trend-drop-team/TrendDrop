@@ -1,11 +1,7 @@
 /** 가상 데이터만 사용한다. 실제 원문·DB 접근과 순위 저장은 없다. */
-import {createHash} from 'node:crypto';
 import {generateJson} from '../gemini.mjs';
 import {extractNew} from '../trend-ranking.mjs';
-const report={
- keyMatchesLocal:process.env.EXPECTED_KEY_SHA256 ? createHash('sha256').update(process.env.GEMINI_API_KEY??'').digest('hex')===process.env.EXPECTED_KEY_SHA256 : null,
- cases:[],
-};
+const report={cases:[]};
 const model='gemini-3.5-flash-lite';
 try {
  const response=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,{

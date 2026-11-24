@@ -1,11 +1,6 @@
 name: Gemini request diagnostic
 on:
   workflow_dispatch:
-    inputs:
-      expected_key_sha256:
-        description: Local key digest for equality check only
-        required: true
-        type: string
 permissions:
   contents: read
 jobs:
@@ -20,4 +15,3 @@ jobs:
       - run: node pipeline/experiments/gemini-diagnostic.mjs
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          EXPECTED_KEY_SHA256: ${{ inputs.expected_key_sha256 }}
