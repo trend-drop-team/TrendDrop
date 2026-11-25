@@ -96,6 +96,23 @@ const watchlistWriteLimiter = rateLimit({
   message: { error: "too many requests" },
 });
 
+/**
+ * DB를 직접 조회하는 공개 GET 라우트 공용 한도(#118) — 쓰기(20회/분)보다 넉넉하게 잡는다.
+ *
+ * 라우트마다 새 인스턴스를 만든다 — express-rate-limit의 기본 keyGenerator는 IP만 보고
+ * 라우트를 구분하지 않으므로, 인스턴스 하나를 여러 app.get에 재사용하면 6개 라우트가
+ * 60회/분 하나를 나눠 쓰게 된다(라우트별 60회/분이 아니라 합산 60회/분으로 좁아짐).
+ */
+function createReadLimiter() {
+  return rateLimit({
+    windowMs: 60_000,
+    limit: 60,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: "too many requests" },
+  });
+}
+
 /** 상태변경 라우트의 CSRF 방어(#94). td-session을 cross-site(SameSite=None)로 내려야 하는
  * 배포 구성에서는 SameSite만으로 CSRF를 막지 못한다 — Origin 헤더는 브라우저가 스푸핑할
  * 수 없으므로 이걸로 대신 막는다. */
@@ -226,11 +243,11 @@ app.post("/api/auth/logout", (request, response) => {
 app.get("/health", (_request, response) => response.json({ ok: true }));
 app.get("/api/health", (_request, response) => response.json({ ok: true }));
 
-app.get("/api/categories", async (_request, response, next) => {
+app.get("/api/categories", createReadLimiter(), async (_request, response, next) => {
   try { response.json(await getCategories()); } catch (error) { next(error); }
 });
 
-app.get("/api/trends", async (request, response, next) => {
+app.get("/api/trends", createReadLimiter(), async (request, response, next) => {
   try {
     const { period, category, limit, runId } = request.query;
     response.json(await getTrends({
@@ -242,29 +259,29 @@ app.get("/api/trends", async (request, response, next) => {
   } catch (error) { next(error); }
 });
 
-app.get("/api/trends/timeline", async (request, response, next) => {
+app.get("/api/trends/timeline", createReadLimiter(), async (request, response, next) => {
   try {
     const value = request.query.limit;
     response.json(await getTimeline(parseLimit(typeof value === "string" ? value : null)));
   } catch (error) { next(error); }
 });
 
-app.get("/api/explore/heatmap", async (request, response, next) => {
+app.get("/api/explore/heatmap", createReadLimiter(), async (request, response, next) => {
   try {
     const value = request.query.window;
     response.json(await getHeatmap(parseWindowHours(typeof value === "string" ? value : null)));
   } catch (error) { next(error); }
 });
 
-app.get("/api/keywords/:slug", async (request, response, next) => {
-  try { response.json(await getKeywordDetail(decodeURIComponent(request.params.slug))); } catch (error) { next(error); }
+app.get("/api/keywords/:slug", createReadLimiter(), async (request, response, next) => {
+  try { response.json(await getKeywordDetail(decodeURIComponent(String(request.params.slug)))); } catch (error) { next(error); }
 });
 
-app.get("/api/keywords/:slug/history", async (request, response, next) => {
+app.get("/api/keywords/:slug/history", createReadLimiter(), async (request, response, next) => {
   try {
     const value = request.query.window;
     response.json(await getKeywordHistory(
-      decodeURIComponent(request.params.slug),
+      decodeURIComponent(String(request.params.slug)),
       parseWindowHours(typeof value === "string" ? value : null),
     ));
   } catch (error) { next(error); }

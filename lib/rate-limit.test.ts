@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { checkRateLimit, clientIp } from "./rate-limit";
+import { checkRateLimit, clientIp, enforceReadRateLimit, READ_RATE_LIMIT } from "./rate-limit";
 
 test("한도 이내 요청은 허용한다", () => {
   const result = checkRateLimit(`t-${Math.random()}`, 3, 60_000);
@@ -51,4 +51,35 @@ test("x-real-ip는 신뢰하지 않는다 — 클라이언트가 자유롭게 �
 test("헤더가 없으면 unknown을 돌려준다", () => {
   const request = new Request("http://example.com");
   assert.equal(clientIp(request), "unknown");
+});
+
+test("enforceReadRateLimit: 한도 이내 요청은 null을 돌려준다(통과) (#118)", () => {
+  const request = new Request("http://example.com", { headers: { "x-forwarded-for": `9.9.9.${Math.random()}` } });
+  assert.equal(enforceReadRateLimit(request, `read-test-ok-${Math.random()}`), null);
+});
+
+test("enforceReadRateLimit: 한도를 넘으면 429와 retry-after 헤더를 돌려준다 (#118)", () => {
+  const ip = `1.1.1.${Math.floor(Math.random() * 1000)}`;
+  const routeKey = `read-test-block-${Math.random()}`;
+  const request = new Request("http://example.com", { headers: { "x-forwarded-for": ip } });
+
+  for (let i = 0; i < READ_RATE_LIMIT; i += 1) {
+    assert.equal(enforceReadRateLimit(request, routeKey), null);
+  }
+
+  const blocked = enforceReadRateLimit(request, routeKey);
+  assert.ok(blocked);
+  assert.equal(blocked.status, 429);
+  assert.ok(Number(blocked.headers.get("retry-after")) > 0);
+});
+
+test("enforceReadRateLimit: 라우트 키가 다르면 같은 IP라도 서로 다른 한도를 쓴다 (#118)", () => {
+  const ip = `2.2.2.${Math.floor(Math.random() * 1000)}`;
+  const request = new Request("http://example.com", { headers: { "x-forwarded-for": ip } });
+
+  for (let i = 0; i < READ_RATE_LIMIT; i += 1) {
+    assert.equal(enforceReadRateLimit(request, "route-a"), null);
+  }
+  assert.ok(enforceReadRateLimit(request, "route-a"));
+  assert.equal(enforceReadRateLimit(request, "route-b"), null);
 });
