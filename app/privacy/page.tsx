@@ -6,6 +6,7 @@ import "./privacy.css";
 export const metadata: Metadata = {
   title: "개인정보 처리방침",
   description: "TrendDrop이 수집하는 개인정보, 쿠키(광고 쿠키 포함), 보관 기간을 안내합니다.",
+  alternates: { canonical: "/privacy" },
 };
 
 export default function PrivacyPage() {

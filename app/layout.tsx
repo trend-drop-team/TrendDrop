@@ -4,6 +4,7 @@ import Script from "next/script";
 
 import { ADSENSE_CLIENT, adsEnabledOnServer, adsPreviewOnServer } from "@/lib/adsense";
 import { getDocList } from "@/lib/docs";
+import { searchVerification } from "@/lib/seo";
 import { SITE_DESCRIPTION, SITE_NAME, SITE_TITLE, siteUrl } from "@/lib/site";
 import { currentUserCanViewDocs } from "@/server/http/current-user";
 
@@ -34,6 +35,8 @@ export const metadata: Metadata = {
     title: SITE_TITLE,
     description: SITE_DESCRIPTION,
   },
+  // 구글 서치콘솔·네이버 서치어드바이저 소유 확인 — env에 토큰이 있을 때만 태그가 나간다(#140).
+  verification: searchVerification(),
 };
 
 // viewport-fit=cover가 있어야 globals.css의 safe-area-inset 처리가 iPhone 홈 인디케이터를 피해 동작한다.
