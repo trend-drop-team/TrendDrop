@@ -1,13 +1,15 @@
 /**
  * 유튜브 인기 급상승 — 인기 영상 제목 20개. 공식 Data API. (trend-collector 이전)
- * env: YOUTUBE_API_KEY (필수), REGION_CODE (기본 KR). 키 없으면 빈 배열.
+ * env: YOUTUBE_API_KEY (필수), REGION_CODE (기본 KR). 키 없으면 예외.
  * meta.videoId 는 추출 단계의 "영상 단위 중복 제거"에 쓰인다.
  */
+import { FETCH_TIMEOUT_MS } from "./http.mjs";
+
 const API = "https://www.googleapis.com/youtube/v3";
 const VIDEO_COUNT = 20;
 
 async function getJson(url) {
-  const res = await fetch(url, { signal: AbortSignal.timeout(30_000) });
+  const res = await fetch(url, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
   const json = await res.json();
   if (!res.ok || json.error) {
     throw new Error(`YouTube API: ${json.error?.errors?.[0]?.reason ?? json.error?.message ?? res.status}`);
@@ -17,7 +19,8 @@ async function getJson(url) {
 
 export async function collect() {
   const key = process.env.YOUTUBE_API_KEY;
-  if (!key) return []; // 키 없으면 조용히 스킵
+  // 키 누락을 0건으로 숨기지 않는다 — collect가 실패 사유로 드러낸다(#84).
+  if (!key) throw new Error("YOUTUBE_API_KEY 미설정");
   const region = process.env.REGION_CODE || "KR";
   const out = [];
 

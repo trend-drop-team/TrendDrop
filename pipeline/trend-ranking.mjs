@@ -64,27 +64,42 @@ export function candidatesOf(rows, cache) {
   return [...groups.values()].map((candidate, i) => ({ ...candidate, id: i + 1 }));
 }
 
+/**
+ * 별칭 연결 응답 검증. 응답 형식 자체가 틀리면 예외다.
+ * 그룹 단위 결함(2개 미만·미등록 ID·여러 그룹에 걸친 ID)은 잘못 합치는 것보다 안 합치는 편이
+ * 안전하므로 그 그룹만 버리고 dropped에 사유와 함께 남긴다 — 겹친 ID는 관련 그룹을 모두 버린다.
+ */
 export function validateLinks(result, candidates) {
   if (!Array.isArray(result?.groups)) throw new Error("키워드 연결 응답 형식 오류");
   const valid = new Set(candidates.map((c) => c.id));
-  const used = new Set();
-  for (const group of result.groups) {
-    if (!Array.isArray(group) || group.length < 2) throw new Error("키워드 연결 그룹 오류");
-    for (const id of group) {
-      if (!valid.has(id) || used.has(id)) throw new Error("키워드 연결에 미등록 또는 중복 ID");
-      used.add(id);
-    }
+  // 1차: 그룹 자체 결함. 겹침은 1차를 통과한 그룹끼리만 센다 — 쓰레기 그룹이 멀쩡한 그룹을 끌고 가지 않게.
+  const checked = result.groups.map((group) => {
+    const ids = Array.isArray(group) ? group : [];
+    const reason = ids.length < 2 ? "그룹 크기 오류"
+      : new Set(ids).size !== ids.length ? "그룹 내 중복 ID"
+      : ids.some((id) => !valid.has(id)) ? "미등록 ID"
+      : null;
+    return { group, ids, reason };
+  });
+  const count = new Map();
+  for (const { ids, reason } of checked) if (!reason) for (const id of ids) count.set(id, (count.get(id) ?? 0) + 1);
+  const groups = [];
+  const dropped = [];
+  for (const { group, ids, reason } of checked) {
+    const why = reason ?? (ids.some((id) => count.get(id) > 1) ? "여러 그룹에 걸친 ID" : null);
+    if (why) dropped.push({ group, reason: why });
+    else groups.push(ids);
   }
-  return result.groups;
+  return { groups, dropped };
 }
 
 export async function linkCandidates(candidates, { generate = generateJson, model = CLAUDE_MODEL } = {}) {
-  if (candidates.length < 2) return { groups: [], requests: 0, model };
+  if (candidates.length < 2) return { groups: [], dropped: [], requests: 0, model };
   const input = candidates.map((c) => ({ id: c.id, term: c.term, context: [...new Set(c.observations.map((r) => `${r.site}: ${r.text}`))].slice(0, 2) }));
   const user = JSON.stringify(input);
   if (user.length > 100_000) throw new Error("키워드 연결 입력이 단일 요청 범위를 초과했습니다.");
   const result = await generate(model, LINK_SYSTEM, user, LINK_SCHEMA);
-  return { groups: validateLinks(result, candidates), requests: 1, model };
+  return { ...validateLinks(result, candidates), requests: 1, model };
 }
 
 export function scoreCandidates(candidates, groups, { windowHours = 6, topN = 10 } = {}) {
@@ -127,4 +142,10 @@ export function scoreCandidates(candidates, groups, { windowHours = 6, topN = 10
 
 export function cacheVersion(model = CLAUDE_MODEL) {
   return `${CACHE_VERSION}:${createHash("sha256").update(model).digest("hex").slice(0, 8)}`;
+}
+
+/** 이 버킷을 이미 랭킹했으면 건너뛸 사유를, 아니면 null을 돌려준다(#91). */
+export function rankSkipReason(bucketAt, rankedRun) {
+  if (!rankedRun) return null;
+  return `버킷 ${bucketAt}은 이미 랭킹됨(run ${rankedRun.id}, ${rankedRun.status}) — 이후 새 수집이 없어 건너뜀`;
 }

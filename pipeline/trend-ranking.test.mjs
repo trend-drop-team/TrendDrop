@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { extractNew, candidatesOf, linkCandidates, scoreCandidates } from "./trend-ranking.mjs";
+import { extractNew, candidatesOf, linkCandidates, scoreCandidates, rankSkipReason } from "./trend-ranking.mjs";
 const row = (site, text, rank = 1, bucket = 12, channel = "ch") => ({ site, kind: "title", text, textHash: `${site}:${text}:${channel}`, bucketAt: `2026-11-24T${bucket}:00:00.000Z`, videoId: site === "youtube" ? `${text}:${channel}` : null, meta: { rank, channelId: channel } });
 const cacheFor = (rows) => new Map(rows.filter((r) => r.site !== "xtrends").map((r) => [r.textHash, { keywords: [{ name: r.text, category: "작품·콘텐츠" }] }]));
 
@@ -53,10 +53,44 @@ test("신규 원문 51개도 1회만 추출하고 초과분은 다음 실행에�
   assert.equal(calls, 2);
 });
 
-test("연결 응답은 이름을 새로 만들거나 후보를 제거할 수 없다", async () => {
-  const candidates = candidatesOf([row("xtrends", "가수"), row("xtrends", "노래")], new Map());
-  await assert.rejects(linkCandidates(candidates, { generate: async () => ({ groups: [[1, 99]] }) }), /미등록/);
-  await assert.rejects(linkCandidates(candidates, { generate: async () => ({ groups: [[1, 2], [2, 1]] }) }), /중복/);
+test("미등록 ID가 든 그룹은 버리고 나머지 그룹은 쓴다 (랭킹 전체를 실패시키지 않는다)", async () => {
+  const candidates = candidatesOf([row("xtrends", "가"), row("xtrends", "나"), row("xtrends", "다"), row("xtrends", "라")], new Map());
+  const links = await linkCandidates(candidates, { generate: async () => ({ groups: [[1, 99], [3, 4]] }) });
+  assert.deepEqual(links.groups, [[3, 4]]);
+  assert.deepEqual(links.dropped, [{ group: [1, 99], reason: "미등록 ID" }]);
+});
+
+test("여러 그룹에 걸친 ID는 합치지 않고 관련 그룹을 모두 버린다", async () => {
+  const candidates = candidatesOf([row("xtrends", "가"), row("xtrends", "나"), row("xtrends", "다"), row("xtrends", "라"), row("xtrends", "마")], new Map());
+  const links = await linkCandidates(candidates, { generate: async () => ({ groups: [[1, 2], [2, 3], [4, 5]] }) });
+  assert.deepEqual(links.groups, [[4, 5]]);
+  assert.deepEqual(links.dropped.map((d) => d.reason), ["여러 그룹에 걸친 ID", "여러 그룹에 걸친 ID"]);
+});
+
+test("크기 1·같은 ID 반복·배열 아닌 그룹은 각 사유로 버린다", async () => {
+  const candidates = candidatesOf([row("xtrends", "가"), row("xtrends", "나")], new Map());
+  const links = await linkCandidates(candidates, { generate: async () => ({ groups: [[1], [2, 2], null] }) });
+  assert.deepEqual(links.groups, []);
+  assert.deepEqual(links.dropped.map((d) => d.reason), ["그룹 크기 오류", "그룹 내 중복 ID", "그룹 크기 오류"]);
+});
+
+test("이미 버린 그룹과 겹친다는 이유로 멀쩡한 그룹을 버리지 않는다", async () => {
+  const candidates = candidatesOf([row("xtrends", "가"), row("xtrends", "나")], new Map());
+  const links = await linkCandidates(candidates, { generate: async () => ({ groups: [[1], [1, 99], [1, 2]] }) });
+  assert.deepEqual(links.groups, [[1, 2]]);
+  assert.equal(links.dropped.length, 2);
+});
+
+test("연결 응답 형식 자체가 틀리면 실패한다", async () => {
+  const candidates = candidatesOf([row("xtrends", "가"), row("xtrends", "나")], new Map());
+  await assert.rejects(linkCandidates(candidates, { generate: async () => ({ pairs: [] }) }), /형식 오류/);
+});
+
+test("버린 그룹의 후보는 합쳐지지 않고 각자 점수를 받는다", async () => {
+  const rows = [row("xtrends", "가", 1), row("xtrends", "나", 2), row("xtrends", "다", 3)];
+  const candidates = candidatesOf(rows, new Map());
+  const links = await linkCandidates(candidates, { generate: async () => ({ groups: [[1, 2], [2, 3]] }) });
+  assert.deepEqual(scoreCandidates(candidates, links.groups, { windowHours: 1 }).map((c) => c.term), ["가", "나", "다"]);
 });
 
 
@@ -80,4 +114,15 @@ test("추출과 연결 모두 Haiku를 기본 모델로 사용한다", async () 
   assert.deepEqual(used, ["claude-haiku-5-5", "claude-haiku-5-5"]);
   assert.equal(extraction.entries[0].model, "claude-haiku-5-5");
   assert.equal(links.model, "claude-haiku-5-5");
+});
+
+// #91 — 버킷 하나당 랭킹 1회
+test("같은 버킷에 저장된 랭킹이 없으면 건너뛰지 않는다", () => {
+  assert.equal(rankSkipReason("2026-11-24T15:00:00.000Z", null), null);
+});
+
+test("같은 버킷을 이미 랭킹했으면 run 번호와 함께 건너뛴다 (collect 실패·수동 재실행)", () => {
+  const reason = rankSkipReason("2026-11-24T15:00:00.000Z", { id: 3281, status: "partial" });
+  assert.match(reason, /2026-11-24T15:00:00.000Z/);
+  assert.match(reason, /run 3281/);
 });

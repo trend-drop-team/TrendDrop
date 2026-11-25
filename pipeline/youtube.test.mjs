@@ -21,3 +21,11 @@ test("유튜브는 전체 인기 20개를 1회 요청하고 댓글·분야는 �
   assert.equal(items[0].unit, "title");
   assert.equal(items[0].meta.channelId, "channel");
 });
+
+test("키가 없으면 0건으로 숨기지 않고 사유와 함께 실패한다 (#84)", async (context) => {
+  const previous = process.env.YOUTUBE_API_KEY;
+  delete process.env.YOUTUBE_API_KEY;
+  context.after(() => { if (previous !== undefined) process.env.YOUTUBE_API_KEY = previous; });
+  context.mock.method(globalThis, "fetch", async () => { throw new Error("호출되면 안 됨"); });
+  await assert.rejects(collect(), /YOUTUBE_API_KEY 미설정/);
+});

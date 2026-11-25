@@ -158,6 +158,23 @@ export async function startRun({ pipeline, geo = "KR", bucketAt, windowHours, bu
   return run.id;
 }
 
+/**
+ * 같은 시간 버킷에 이미 저장된 랭킹 run(성공·부분 성공)을 찾는다. 없으면 null.
+ * 버킷 하나당 랭킹 1회를 지키기 위해 rank-popular.mjs가 시작 전에 확인한다(#91).
+ * error로 끝난 run은 랭킹을 남기지 않았으므로 제외한다 — 같은 버킷 재실행을 허용한다.
+ * 동시 실행은 rank.yml의 concurrency 그룹(pipeline-rank)이 직렬화한다.
+ */
+export async function findRankedRun(bucketAt) {
+  const s = await sql();
+  await assertSchema();
+  // 랭킹 이후 같은 버킷에 원문이 더 들어왔으면(collect 재실행) 다시 랭킹해야 하므로 찾지 않는다.
+  const [run] = await s`SELECT c.id, c.status FROM collection_runs c
+    WHERE c.pipeline = 'popular' AND c.bucket_at = ${bucketAt} AND c.status IN ('success', 'partial')
+      AND c.started_at >= (SELECT max(r.captured_at) FROM raw_signals r WHERE r.bucket_at = ${bucketAt})
+    ORDER BY c.id DESC LIMIT 1`;
+  return run ?? null;
+}
+
 /** startRun()으로 연 실행을 마무리(성공/실패 공통). */
 export async function finishRun(
   runId,
