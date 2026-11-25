@@ -240,7 +240,8 @@ export default function RankingBoard({ snapshots, daily, categories, latestColle
   );
 
   // 24시간 집계로 바꿔도 티커는 비우지 않는다 — 비우면 영역이 사라졌다 생기며 깜빡인다(#143).
-  const tickerItems = snapshot.ticker;
+  // 그때는 스크럽한 과거 시점이 아니라 최신 시점의 하이라이트를 흐리게 둔다.
+  const tickerItems = isRealtime ? snapshot.ticker : (snapshots[latestIndex]?.ticker ?? []);
 
   const summary = useMemo(() => {
     const newCount = visible.filter((row) => getRankDelta(row).kind === "new").length;
@@ -555,6 +556,12 @@ export default function RankingBoard({ snapshots, daily, categories, latestColle
     setLive(true);
   };
 
+  // 24시간 집계로 가면 타임랩스를 멈춘다 — 타임머신이 inert라 ⏸를 누를 수 없는 채로 남지 않게(#143).
+  const handlePeriodChange = (next: Period) => {
+    if (next !== "realtime") setPlaying(false);
+    setPeriod(next);
+  };
+
   const handleJumpToNow = () => {
     setPlaying(false);
     setSnapshotIndex(latestIndex);
@@ -806,7 +813,7 @@ export default function RankingBoard({ snapshots, daily, categories, latestColle
               type="button"
               className="period-button"
               aria-pressed={period === option.id}
-              onClick={() => setPeriod(option.id)}
+              onClick={() => handlePeriodChange(option.id)}
             >
               {option.label}
             </button>

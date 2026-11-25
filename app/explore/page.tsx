@@ -33,6 +33,11 @@ export const metadata: Metadata = {
     title: `${EXPLORE_TITLE} · ${SITE_NAME}`,
     description: EXPLORE_DESCRIPTION,
   },
+  twitter: {
+    card: "summary_large_image",
+    title: `${EXPLORE_TITLE} · ${SITE_NAME}`,
+    description: EXPLORE_DESCRIPTION,
+  },
 };
 
 export default async function ExplorePage() {

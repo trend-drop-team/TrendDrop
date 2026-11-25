@@ -230,8 +230,8 @@ export default async function TrendDetailPage({ params }: { params: Promise<{ sl
 
   return (
     <div className="td">
-      {/* 검색 결과용 기사·이동 경로 구조화 데이터(#140). */}
-      <JsonLd data={trendDetailJsonLd(siteUrl(), detail)} />
+      {/* 검색 결과용 기사·이동 경로 구조화 데이터(#140). 샘플(mock) 상세는 색인 대상으로 내보내지 않는다. */}
+      {source !== "mock" && <JsonLd data={trendDetailJsonLd(siteUrl(), detail)} />}
       <StaleCacheWriter cacheKey={`trend:${slug}`} summary={staleSummary} />
       <div className="td-content">
         <div className="td-topbar">

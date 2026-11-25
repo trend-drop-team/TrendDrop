@@ -67,6 +67,8 @@ export default async function HomePage() {
     .filter((row) => row.rank > WATCH_FROM_RANK)
     .slice(0, WATCH_LIMIT);
 
+  const usingMock = timelineResult.meta.source === "mock";
+
   const staleSummary = {
     heading: "마지막으로 확인된 순위",
     items: dailyResult.data.slice(0, 5).map((row) => ({
@@ -79,8 +81,15 @@ export default async function HomePage() {
   return (
     <div className="page-shell">
       <main className="app-main">
-        {/* 검색엔진용 구조화 요약 — 사이트 정체성 + 지금 순위 상위 목록(#140). */}
-        <JsonLd data={[websiteJsonLd(siteUrl()), trendListJsonLd(siteUrl(), latest?.rows ?? [])]} />
+        {/* 검색엔진용 구조화 요약 — 사이트 정체성 + 지금 순위 상위 목록(#140).
+            샘플(mock) 순위는 실제 데이터처럼 색인되면 안 되므로 순위 목록은 싣지 않는다. */}
+        <JsonLd
+          data={
+            usingMock
+              ? websiteJsonLd(siteUrl())
+              : [websiteJsonLd(siteUrl()), trendListJsonLd(siteUrl(), latest?.rows ?? [])]
+          }
+        />
         <StaleCacheWriter cacheKey="home" summary={staleSummary} />
         <SampleDataBadge metas={[categoryResult.meta, timelineResult.meta, dailyResult.meta]} />
         <Onboarding categories={categories} />
