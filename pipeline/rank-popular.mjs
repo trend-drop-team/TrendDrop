@@ -42,13 +42,22 @@ async function rank(rows, bucketAt) {
   if (save) await saveExtractions(extraction.entries, cacheVersion());
   const candidates = candidatesOf(rows, cache);
   const links = await linkCandidates(candidates, { generate });
+  // 결함 그룹은 연결하지 않고(각자 점수) 원문 그룹을 경고로 남긴다 — 원인 추적용.
+  for (const { group, reason } of links.dropped.slice(0, 10)) {
+    const shown = String(JSON.stringify(group)).slice(0, 200).replace(/%/g, "%25");
+    console.log(`::warning title=별칭 연결 그룹 버림::${reason} ${shown}`);
+  }
   const ranked = scoreCandidates(candidates, links.groups, { windowHours: hours, topN });
   console.log(JSON.stringify({ bucketAt, calls, windowHours: hours, extraction: { ...extraction, entries: undefined }, links, candidates: candidates.length, ranked }, null, 2));
   if (save) {
     await saveTrendSnapshots(runId, bucketAt, ranked, { rankingProfile: PROFILE });
-    await finishRun(runId, { status: extraction.deferred ? "partial" : "success", rawSignalCount: rows.length, keywordCount: ranked.length, filtered: false,
+    const notes = [
+      extraction.deferred ? `호출 상한으로 신규 원문 ${extraction.deferred}개 다음 회차 대기` : null,
+      links.dropped.length ? `별칭 연결 결함 그룹 ${links.dropped.length}개 버림(연결 없이 각자 점수)` : null,
+    ].filter(Boolean);
+    await finishRun(runId, { status: notes.length ? "partial" : "success", rawSignalCount: rows.length, keywordCount: ranked.length, filtered: false,
       apiCallLog: { provider: "anthropic", rankingProfile: PROFILE, calls, extraction: { ...extraction, entries: undefined }, links },
-      errorMessage: extraction.deferred ? `호출 상한으로 신규 원문 ${extraction.deferred}개 다음 회차 대기` : null });
+      errorMessage: notes.length ? notes.join("; ") : null });
   }
 }
 
