@@ -1,7 +1,7 @@
 import type { MetadataRoute } from "next";
 
 import { fetchApiOr } from "@/lib/api-client";
-import { getDocList } from "@/lib/docs";
+import { trendPath } from "@/lib/seo";
 import { siteUrl } from "@/lib/site";
 import type { ApiResult } from "@/types/api/common";
 import type { TrendRow } from "@/types/api/trend";
@@ -20,14 +20,9 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: `${base}/`, changeFrequency: "hourly", priority: 1 },
     { url: `${base}/explore`, changeFrequency: "hourly", priority: 0.8 },
     { url: `${base}/privacy`, changeFrequency: "yearly", priority: 0.2 },
-    { url: `${base}/docs`, changeFrequency: "weekly", priority: 0.4 },
-    ...getDocList().map((doc) => ({
-      url: `${base}/docs/${doc.slug}`,
-      changeFrequency: "monthly" as const,
-      priority: 0.3,
-    })),
+    // /docs는 관리자 전용(#79)이라 크롤러는 404를 받는다 — 사이트맵에 넣지 않는다(#140).
     ...slugs.map((slug) => ({
-      url: `${base}/trend/${encodeURIComponent(slug)}`,
+      url: `${base}${trendPath(slug)}`,
       changeFrequency: "hourly" as const,
       priority: 0.6,
     })),

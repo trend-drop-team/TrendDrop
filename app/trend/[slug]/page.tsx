@@ -10,7 +10,9 @@ import ShareButton from "@/app/share-button";
 import ShareCardButton from "@/app/share-card-button";
 import { dateTimeLabel } from "@/lib/utils/date";
 import KakaoShareButton from "@/app/kakao-share-button";
-import { SITE_NAME } from "@/lib/site";
+import { trendDetailJsonLd, trendPath } from "@/lib/seo";
+import { SITE_NAME, siteUrl } from "@/lib/site";
+import JsonLd from "@/app/json-ld";
 import type { KeywordDetail } from "@/types/api/keyword";
 
 import BackLink from "../back-link";
@@ -53,11 +55,13 @@ export async function generateMetadata({
 
   const title = `${detail.keyword} · ${detail.rank}위`;
   const description = shareDescription(detail);
-  const url = `/trend/${encodeURIComponent(detail.slug)}`;
+  const url = trendPath(detail.slug);
 
   return {
     title,
     description,
+    // 같은 키워드가 인코딩만 다른 주소로 들어와도 하나로 색인되게(#140).
+    alternates: { canonical: url },
     // og:title에는 title.template이 적용되지 않아 서비스명을 직접 붙인다.
     openGraph: { type: "article", title: `${title} · ${SITE_NAME}`, description, url },
     twitter: { card: "summary_large_image", title: `${title} · ${SITE_NAME}`, description },
@@ -226,6 +230,8 @@ export default async function TrendDetailPage({ params }: { params: Promise<{ sl
 
   return (
     <div className="td">
+      {/* 검색 결과용 기사·이동 경로 구조화 데이터(#140). 샘플(mock) 상세는 색인 대상으로 내보내지 않는다. */}
+      {source !== "mock" && <JsonLd data={trendDetailJsonLd(siteUrl(), detail)} />}
       <StaleCacheWriter cacheKey={`trend:${slug}`} summary={staleSummary} />
       <div className="td-content">
         <div className="td-topbar">

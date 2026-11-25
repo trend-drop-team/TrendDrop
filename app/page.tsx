@@ -1,8 +1,13 @@
+import type { Metadata } from "next";
+
+import JsonLd from "@/app/json-ld";
 import Onboarding from "@/app/onboarding";
 import RankingBoard from "@/app/ranking-board";
 import SampleDataBadge from "@/app/sample-data-badge";
 import StaleCacheWriter from "@/app/stale-cache-writer";
 import { fetchApi } from "@/lib/api-client";
+import { trendListJsonLd, websiteJsonLd } from "@/lib/seo";
+import { siteUrl } from "@/lib/site";
 import type { ApiResult } from "@/types/api/common";
 import type { CategoryRow } from "@/types/api/category";
 import type { TimelineSnapshot, TrendRow } from "@/types/api/trend";
@@ -14,6 +19,11 @@ const WATCH_LIMIT = 4;
 // 수집 run이 계속 쌓이므로 페이지 자체는 매 요청 렌더한다(빌드 타임 프리렌더 금지 —
 // 프리렌더로 돌리면 빌드가 백엔드 가동 여부에 묶인다). 데이터 캐시는 fetchApi가 맡는다.
 export const dynamic = "force-dynamic";
+
+// 제목·설명은 레이아웃 기본값을 쓰고, 대표 주소만 못 박는다 — 쿼리가 붙은 변형 주소의 중복 색인 방지(#140).
+export const metadata: Metadata = {
+  alternates: { canonical: "/" },
+};
 
 export default async function HomePage() {
   const [categoryResult, timelineResult, dailyResult] = await Promise.all([
@@ -57,6 +67,8 @@ export default async function HomePage() {
     .filter((row) => row.rank > WATCH_FROM_RANK)
     .slice(0, WATCH_LIMIT);
 
+  const usingMock = timelineResult.meta.source === "mock";
+
   const staleSummary = {
     heading: "마지막으로 확인된 순위",
     items: dailyResult.data.slice(0, 5).map((row) => ({
@@ -69,6 +81,15 @@ export default async function HomePage() {
   return (
     <div className="page-shell">
       <main className="app-main">
+        {/* 검색엔진용 구조화 요약 — 사이트 정체성 + 지금 순위 상위 목록(#140).
+            샘플(mock) 순위는 실제 데이터처럼 색인되면 안 되므로 순위 목록은 싣지 않는다. */}
+        <JsonLd
+          data={
+            usingMock
+              ? websiteJsonLd(siteUrl())
+              : [websiteJsonLd(siteUrl()), trendListJsonLd(siteUrl(), latest?.rows ?? [])]
+          }
+        />
         <StaleCacheWriter cacheKey="home" summary={staleSummary} />
         <SampleDataBadge metas={[categoryResult.meta, timelineResult.meta, dailyResult.meta]} />
         <Onboarding categories={categories} />

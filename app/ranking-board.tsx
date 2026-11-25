@@ -239,10 +239,9 @@ export default function RankingBoard({ snapshots, daily, categories, latestColle
     [saved, rowByKeyword],
   );
 
-  const tickerItems = useMemo(
-    () => (isRealtime ? snapshot.ticker : []),
-    [isRealtime, snapshot.ticker],
-  );
+  // 24시간 집계로 바꿔도 티커는 비우지 않는다 — 비우면 영역이 사라졌다 생기며 깜빡인다(#143).
+  // 그때는 스크럽한 과거 시점이 아니라 최신 시점의 하이라이트를 흐리게 둔다.
+  const tickerItems = isRealtime ? snapshot.ticker : (snapshots[latestIndex]?.ticker ?? []);
 
   const summary = useMemo(() => {
     const newCount = visible.filter((row) => getRankDelta(row).kind === "new").length;
@@ -557,6 +556,12 @@ export default function RankingBoard({ snapshots, daily, categories, latestColle
     setLive(true);
   };
 
+  // 24시간 집계로 가면 타임랩스를 멈춘다 — 타임머신이 inert라 ⏸를 누를 수 없는 채로 남지 않게(#143).
+  const handlePeriodChange = (next: Period) => {
+    if (next !== "realtime") setPlaying(false);
+    setPeriod(next);
+  };
+
   const handleJumpToNow = () => {
     setPlaying(false);
     setSnapshotIndex(latestIndex);
@@ -656,9 +661,14 @@ export default function RankingBoard({ snapshots, daily, categories, latestColle
           </p>
         )}
 
-        {isRealtime && live && (
+        {live && (
           // key로 매 스냅샷마다 진행 바 애니메이션을 다시 시작시킨다.
-          <div className="live-progress" key={snapshotIndex} aria-hidden="true">
+          // 24시간 집계 중에는 지우지 않고 멈춰 둔다 — 기간 전환 때 막대가 사라졌다 생기지 않게(#143).
+          <div
+            className={`live-progress${isRealtime ? "" : " is-dormant"}`}
+            key={snapshotIndex}
+            aria-hidden="true"
+          >
             <span className="live-progress-fill" />
           </div>
         )}
@@ -673,53 +683,63 @@ export default function RankingBoard({ snapshots, daily, categories, latestColle
         )}
       </div>
 
-      {/* 타임머신 스크러버 — 실시간 모드에서만 */}
-      {isRealtime && (
-        <div className="timemachine">
-          <div className="tm-row">
-            <button
-              type="button"
-              className={`tm-play${playing ? " is-playing" : ""}`}
-              onClick={handlePlayToggle}
-              aria-pressed={playing}
-              aria-label={playing ? "타임랩스 정지" : "타임랩스 재생"}
-            >
-              <span aria-hidden="true">{playing ? "⏸" : "▶"}</span>
-            </button>
+      {/*
+        타임머신·티커는 실시간 전용이지만 24시간 집계 중에도 자리를 지킨다 — 흐리게 + inert.
+        조건부로 빼면 기간을 바꿀 때마다 막대 영역이 사라졌다 생기며 레이아웃이 출렁인다(#143).
+      */}
+      <div
+        className={`timemachine${isRealtime ? "" : " is-dormant"}`}
+        inert={!isRealtime}
+        aria-hidden={isRealtime ? undefined : true}
+      >
+        <div className="tm-row">
+          <button
+            type="button"
+            className={`tm-play${playing ? " is-playing" : ""}`}
+            onClick={handlePlayToggle}
+            aria-pressed={playing}
+            aria-label={playing ? "타임랩스 정지" : "타임랩스 재생"}
+          >
+            <span aria-hidden="true">{playing ? "⏸" : "▶"}</span>
+          </button>
 
-            <input
-              type="range"
-              className="tm-range"
-              min={0}
-              max={latestIndex}
-              step={1}
-              value={snapshotIndex}
-              onChange={handleScrub}
-              aria-label="시간 이동"
-              aria-valuetext={`${snapshot.clock} · ${snapshot.label}`}
-            />
+          <input
+            type="range"
+            className="tm-range"
+            min={0}
+            max={latestIndex}
+            step={1}
+            value={snapshotIndex}
+            onChange={handleScrub}
+            aria-label="시간 이동"
+            aria-valuetext={`${snapshot.clock} · ${snapshot.label}`}
+          />
 
-            <span className="tm-label">
-              <span className="tm-clock">{snapshot.clock}</span>
-              <span className="tm-ago">{snapshot.label}</span>
-            </span>
-          </div>
-
-          <div className="tm-ticks" aria-hidden="true">
-            {snapshots.map((entry, index) => (
-              <span
-                key={entry.runId}
-                className={`tm-tick${index === snapshotIndex ? " is-active" : ""}${
-                  index === latestIndex ? " is-latest" : ""
-                }`}
-              />
-            ))}
-          </div>
+          <span className="tm-label">
+            <span className="tm-clock">{snapshot.clock}</span>
+            <span className="tm-ago">{snapshot.label}</span>
+          </span>
         </div>
-      )}
 
-      {isRealtime && tickerItems.length > 0 && (
-        <div className="ticker" aria-label="실시간 하이라이트">
+        <div className="tm-ticks" aria-hidden="true">
+          {snapshots.map((entry, index) => (
+            <span
+              key={entry.runId}
+              className={`tm-tick${index === snapshotIndex ? " is-active" : ""}${
+                index === latestIndex ? " is-latest" : ""
+              }`}
+            />
+          ))}
+        </div>
+      </div>
+
+      {tickerItems.length > 0 && (
+        <div
+          className={`ticker${isRealtime ? "" : " is-dormant"}`}
+          aria-label="실시간 하이라이트"
+          inert={!isRealtime}
+          aria-hidden={isRealtime ? undefined : true}
+        >
           <div className="ticker-track">
             {[0, 1].map((copy) => (
               <div className="ticker-group" key={copy} aria-hidden={copy === 1 ? true : undefined}>
@@ -793,7 +813,7 @@ export default function RankingBoard({ snapshots, daily, categories, latestColle
               type="button"
               className="period-button"
               aria-pressed={period === option.id}
-              onClick={() => setPeriod(option.id)}
+              onClick={() => handlePeriodChange(option.id)}
             >
               {option.label}
             </button>

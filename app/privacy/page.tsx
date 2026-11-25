@@ -1,11 +1,26 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
+import { SITE_NAME } from "@/lib/site";
+
 import "./privacy.css";
 
+const PRIVACY_TITLE = "개인정보 처리방침";
+const PRIVACY_DESCRIPTION = "TrendDrop이 수집하는 개인정보, 쿠키(광고 쿠키 포함), 보관 기간을 안내합니다.";
+
 export const metadata: Metadata = {
-  title: "개인정보 처리방침",
-  description: "TrendDrop이 수집하는 개인정보, 쿠키(광고 쿠키 포함), 보관 기간을 안내합니다.",
+  title: PRIVACY_TITLE,
+  description: PRIVACY_DESCRIPTION,
+  alternates: { canonical: "/privacy" },
+  // 하위 라우트의 openGraph는 레이아웃 값을 통째로 덮으므로 필드를 다 채운다(og:url이 "/"로 남지 않게, #140).
+  openGraph: {
+    type: "website",
+    siteName: SITE_NAME,
+    locale: "ko_KR",
+    url: "/privacy",
+    title: `${PRIVACY_TITLE} · ${SITE_NAME}`,
+    description: PRIVACY_DESCRIPTION,
+  },
 };
 
 export default function PrivacyPage() {
