@@ -1607,6 +1607,26 @@ h3 {
   animation: live-fill 8s linear forwards;
 }
 
+/*
+  24시간 집계 중의 실시간 전용 영역(진행 바·타임머신·티커).
+  지우지 않고 자리를 지킨 채 흐려지고 멈춘다 — 기간 전환 때 막대가 사라졌다 생기는 깜빡임·CLS 방지(#143).
+  prefers-reduced-motion에선 전역 규칙이 transition을 0으로 만든다.
+*/
+.live-progress,
+.timemachine,
+.ticker {
+  transition: opacity 0.18s ease;
+}
+
+.is-dormant {
+  opacity: 0.45;
+}
+
+.live-progress.is-dormant .live-progress-fill,
+.ticker.is-dormant .ticker-track {
+  animation-play-state: paused;
+}
+
 @keyframes live-fill {
   from {
     transform: scaleX(0);
@@ -3667,12 +3687,14 @@ body {
   border-right: 1px solid var(--line-strong);
   background: var(--surface-strong);
   box-shadow: var(--shadow-hover);
-  animation: app-drawer-in 0.24s var(--spring);
+  /* 패널 폭 전체를 스프링(오버슈트)으로 튕기던 것을 짧은 페이드+슬라이드로 줄였다(#142). */
+  animation: app-drawer-in 0.16s ease-out;
 }
 
 @keyframes app-drawer-in {
   from {
-    transform: translateX(-100%);
+    opacity: 0;
+    transform: translateX(-16px);
   }
 }
 
